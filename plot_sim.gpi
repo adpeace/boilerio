@@ -1,0 +1,39 @@
+set terminal pngcairo size 1280, 768
+set output 'simulation.png'
+
+set grid x
+set grid y
+
+set lmargin 10
+
+set multiplot
+set size 1, 0.5
+set origin 0, 0.5
+set title 'Temperature and system behaviour'
+set ylabel "deg C"
+set bmargin 0
+set xtics format " "
+plot "sim_data" using 1:4 with lines title "Temperature", \
+     "" using 1:5 with lines title "Temperature with simulated reading error"
+
+set size 1, 0.15
+set origin 0, 0.35
+unset title
+set ylabel "value"
+plot "" using 1:3 with lines title "PID output"
+
+set origin 0, 0.2
+set ylabel "value"
+plot "" using 1:6 w lines t 'error', \
+     "" using 1:7 w lines t 'integral', \
+     "" using 1:8 w lines t 'diff'
+
+set origin 0, 0
+set size 1, 0.2
+set yrange [-10:70]
+set xtics format "%g"
+set ytics 0, 10, 60
+set ylabel "time on//min"
+set xlabel "Time into test"
+set bmargin 4
+plot "" using 1:2 with lines title "Boiler on/off period"
