@@ -93,9 +93,11 @@ def run_simulation(start_temp, target_temp, sim_duration_mins,
         state.updateTemperature(room_temp_with_error)
         dutyCycle = state.pwmDutyCycle.total_seconds() \
                     if state.pwmDutyCycle else 0
+        dutyCycle = float(dutyCycle) / maintaintemp.PWM_PERIOD.total_seconds()
         print (now - start).total_seconds() / 60, boiler_on, \
-              dutyCycle, house.room_temp, room_temp_with_error, state.pid.last_prop, \
-              state.pid.error_integral, state.pid.last_diff
+              dutyCycle, house.room_temp, room_temp_with_error, \
+              state.pid.last_prop, state.pid.error_integral, \
+              state.pid.last_diff
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
