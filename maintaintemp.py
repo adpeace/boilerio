@@ -109,10 +109,11 @@ class State(object):
         self.boilerControl = boiler_control
 
     def updateTargetTemperature(self, target):
-        logger.info("Target temperature changed from %s to %s",
-                    str(self.targetTemp), target)
-        self.targetTemp = target
-        self.pid.reset(target)
+        if target != self.targetTemp:
+            logger.info("Target temperature changed from %s to %s",
+                        str(self.targetTemp), target)
+            self.targetTemp = target
+            self.pid.reset(target)
 
     def updateState(self, new_state):
         if self.state != new_state:

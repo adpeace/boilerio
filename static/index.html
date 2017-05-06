@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta id="meta" name="viewport"
+      content="width=device-width, initial-scale=1.0" />
+
+<title>Heating</title>
+
+<meta name="theme-color" content="#03bc89">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json">
+<link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet">
+<link rel="stylesheet" href="boilerio.css">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons"
+      rel="stylesheet">
+
+</head>
+<body>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="schedulerweb.js"></script>
+<script>
+load_summary = function() {
+    window.scrollTo(0, 0);
+    $.ajax({url: "api/summary", type: "GET",
+            dataType: "json"}).done(renderSummary);
+};
+
+load_schedule = function() {
+    window.scrollTo(0, 0);
+    $.ajax({url: "api/schedule", type: "GET",
+            dataType: "json"}).done(renderFullSchedule);
+}
+
+ready = function() {
+    if (window.location.hash == "#edit_schedule") {
+        load_schedule();
+    } else {
+        load_summary();
+    }
+}
+
+$(document).ready(ready);
+window.onhashchange = ready;
+</script>
+
+<div id="title"></div>
+<div id="app"></div>
+
+</body>
+</html>
