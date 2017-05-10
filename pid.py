@@ -6,21 +6,21 @@ logger.setLevel(logging.DEBUG)
 
 class PID(object):
     def __init__(self, setpoint, Kp, Ki, Kd):
-        self.setpoint = setpoint
         self.Kp = Kp
         self.Ki = Ki
         self.Kd = Kd
-        self.error_integral = 0
-        self.last_diff = 0
         self.last_prop = 0
         self.last_pv = None
         self.min_output = 0.15
+        self.reset(setpoint)
 
     def setLastValue(self, val):
         self.last_pv = val
 
-    def setSetpoint(self, setpoint):
+    def reset(self, setpoint):
         self.setpoint = setpoint
+        self.last_diff = 0
+        self.error_integral = 0
 
     def update(self, pv):
         if self.setpoint is None:

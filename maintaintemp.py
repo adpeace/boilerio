@@ -110,7 +110,7 @@ class State(object):
         logger.info("Target temperature changed from %s to %s",
                     str(self.targetTemp), target)
         self.targetTemp = target
-        self.pid.setSetpoint(target)
+        self.pid.reset(target)
 
     def updateState(self, new_state):
         if self.state != new_state:
