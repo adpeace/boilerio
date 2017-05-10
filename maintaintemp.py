@@ -26,6 +26,10 @@ def load_config(path):
 
     return {
         'zone_demand_topic': cfg.get('heating', 'demand_request_topic'),
+        'target_temp_topic': cfg.get('heating',
+                                     'target_temp_topic'),
+        'thermostat_status_topic': cfg.get('heating',
+                                           'thermostat_status_topic'),
         'mqtt_host': cfg.get('mqtt', 'host'),
         'mqtt_user': cfg.get('mqtt', 'user'),
         'mqtt_password': cfg.get('mqtt', 'password'),
@@ -282,49 +286,73 @@ def on_connect(client, userdata, flags, rc):
     if rc:
         logger.error("Error connecting, rc %d", rc)
         return
-    topic = userdata['tempsensor']
-    client.subscribe(topic)
-    logger.info("Subscribing to %s", topic)
+    client.subscribe(userdata['tempsensor'])
+    client.subscribe(userdata['target_temp'])
+    client.publish(userdata['thermostat_status_topic'], json.dumps({
+        'thermostat_id': userdata['thermostat_id'],
+        'status': 'online'}))
 
 def on_message(client, userdata, msg):
     state = userdata['state']
 
-    data = json.loads(msg.payload)
-    if 'temperature' not in data:
-        return
+    def temperature_update():
+        data = json.loads(msg.payload)
+        if 'temperature' not in data:
+            return
 
-    try:
-        temp = float(data['temperature'])
-    except ValueError:
-        return
+        try:
+            temp = float(data['temperature'])
+        except ValueError:
+            return
 
-    now = datetime.datetime.now()
-    state.now = now
-    state.updateTemperature(temp)
+        now = datetime.datetime.now()
+        state.now = now
+        state.updateTemperature(temp)
 
-    # Print information for debugging/graphing:
-    duty_cycle = state.pwmDutyCycle.total_seconds() \
-                 if state.pwmDutyCycle else 0
-    print now, state.lastCommand.cmd, duty_cycle, state.lastTemperature(), \
-          state.pid.last_prop, state.pid.error_integral, state.pid.last_diff
+        # Print information for debugging/graphing:
+        duty_cycle = state.pwmDutyCycle.total_seconds() \
+                     if state.pwmDutyCycle else 0
+        print now, state.targetTemp, state.lastCommand.cmd, duty_cycle, \
+              state.lastTemperature(), state.pid.last_prop, \
+              state.pid.error_integral, state.pid.last_diff
 
-def maintain_temp(sensor_topic, thermostat_id, target_temp, dry_run):
+    def target_update():
+        # Payload should be dictionary with key 'target':
+        try:
+            target = float(json.loads(msg.payload)['target'])
+            userdata['state'].updateTargetTemperature(target)
+        except KeyError, ValueError:
+            pass
+
+    if msg.topic == userdata['tempsensor']:
+        temperature_update()
+    elif msg.topic == userdata['target_temp']:
+        target_update()
+
+def maintain_temp(sensor_topic, thermostat_id, dry_run):
     state = State()
-    state.updateTargetTemperature(target_temp)
 
     conf = load_config(CONFIG_PATH)
-    mqttc = mqtt.Client(userdata={'state': state,
-                                  'tempsensor': sensor_topic})
+    mqttc = mqtt.Client(userdata={
+        'state': state,
+        'tempsensor': sensor_topic,
+        'target_temp': conf['target_temp_topic'],
+        'thermostat_status_topic': conf['thermostat_status_topic'],
+        'thermostat_id': thermostat_id,
+        })
     if not dry_run:
         state.boilerControl = MqttBoilerControl(thermostat_id, mqttc,
                                                 conf['zone_demand_topic'])
     mqttc.on_connect = on_connect
     mqttc.on_message = on_message
     mqttc.username_pw_set(conf['mqtt_user'], conf['mqtt_password'])
+    mqttc.will_set(conf['thermostat_status_topic'], json.dumps({
+        'thermostat_id': thermostat_id, 'status': 'offline'}))
     mqttc.connect(conf['mqtt_host'], 1883, 60)
 
     t = threading.Timer(1, timer, [state])
     t.start()
+
     mqttc.loop_forever()
 
 if __name__ == "__main__":
@@ -332,8 +360,6 @@ if __name__ == "__main__":
     parser.add_argument("-n", action="store_true", dest="dry_run")
     parser.add_argument("sensor_topic")
     parser.add_argument("thermostat_id")
-    parser.add_argument("target_temp", type=float)
     args = parser.parse_args()
 
-    maintain_temp(args.sensor_topic, int(args.thermostat_id, 0), args.target_temp,
-                  args.dry_run)
+    maintain_temp(args.sensor_topic, int(args.thermostat_id, 0), args.dry_run)
