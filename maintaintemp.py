@@ -93,7 +93,7 @@ class BoilerPWM(pwm.PWM):
 # Global state:
 
 class State(object):
-    def __init__(self):
+    def __init__(self, boiler_control):
         self.now = None
         self.lastCommand = None
         self.lastReading = None
@@ -105,10 +105,8 @@ class State(object):
 
         self.pid = pid.PID(None, PID_KP, PID_KI, PID_KD)
 
-        self.lastMeanUpdate = None
-
         self.targetTemp = None
-        self.boilerControl = None
+        self.boilerControl = boiler_control
 
     def updateTargetTemperature(self, target):
         logger.info("Target temperature changed from %s to %s",
@@ -322,7 +320,12 @@ def on_message(client, userdata, msg):
         target_update()
 
 def maintain_temp(sensor_topic, thermostat_id, dry_run):
-    state = State()
+    if not dry_run:
+        boiler_control = MqttBoilerControl(thermostat_id, mqttc,
+                                          conf['zone_demand_topic'])
+    else:
+        boiler_control = None
+    state = State(boiler_control)
 
     conf = load_config(CONFIG_PATH)
     mqttc = mqtt.Client(userdata={
@@ -332,9 +335,6 @@ def maintain_temp(sensor_topic, thermostat_id, dry_run):
         'thermostat_status_topic': conf['thermostat_status_topic'],
         'thermostat_id': thermostat_id,
         })
-    if not dry_run:
-        state.boilerControl = MqttBoilerControl(thermostat_id, mqttc,
-                                                conf['zone_demand_topic'])
     mqttc.on_connect = on_connect
     mqttc.on_message = on_message
     mqttc.username_pw_set(conf['mqtt_user'], conf['mqtt_password'])

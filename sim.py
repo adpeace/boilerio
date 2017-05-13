@@ -77,10 +77,9 @@ class House(object):
 
 def run_simulation(start_temp, target_temp, sim_duration_mins,
                    randomness):
-    state = maintaintemp.State()
     house = House(start_temp)
     boiler = FakeBoiler(house)
-    state.boilerControl = boiler
+    state = maintaintemp.State(boiler)
     state.updateTargetTemperature(target_temp)
 
     # Start time doesn't really matter:
