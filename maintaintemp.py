@@ -2,11 +2,11 @@
 
 import datetime
 import logging
-import threading
 import argparse
 import ConfigParser
 import paho.mqtt.client as mqtt
 import json
+import time
 
 import pwm
 import pid
@@ -273,14 +273,6 @@ def period(state):
     _, state_fn, _ = state_fns[state.state]
     state_fn(state)
 
-def timer(state):
-    now = datetime.datetime.now()
-    state.now = now
-    period(state)
-
-    # Reschedule ourselves in a second:
-    threading.Timer(1, timer, [state]).start()
-
 # Temperature reading update:
 def on_connect(client, userdata, flags, rc):
     if rc:
@@ -350,10 +342,11 @@ def maintain_temp(sensor_topic, thermostat_id, dry_run):
         'thermostat_id': thermostat_id, 'status': 'offline'}))
     mqttc.connect(conf['mqtt_host'], 1883, 60)
 
-    t = threading.Timer(1, timer, [state])
-    t.start()
-
-    mqttc.loop_forever()
+    mqttc.loop_start()
+    while True:
+        time.sleep(1)
+        state.now = datetime.datetime.now()
+        period(state)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Maintain target temperature")
