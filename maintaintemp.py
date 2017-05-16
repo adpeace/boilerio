@@ -194,8 +194,7 @@ def mode_on(state):
         state.updateState(MODE_OFF)
         return
 
-    # If we are within the drift amount of the target zone, turn the heating
-    # off and switch to waiting for a fall in temperature:
+    # If we are within target zone, switch to the PID controller:
     if state.lastTemperature() >= (state.targetTemp - TARGET_ZONE_WIDTH / 2):
         logger.info("Temperature in target zone")
         state.boilerCommand(BOILER_COMMAND_OFF)
