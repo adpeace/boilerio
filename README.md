@@ -1,7 +1,11 @@
 # Heating control
 
-The code in this repository implements a basic heating control system that is
-able to maintain a set target temperature by modulating a heating zone on/off.
+BoilerIO is a software thermostat.
+
+An installation of BoilerIO can control heating in a zone of your home.  Code is
+provided here to connect with Danfoss RF receivers though other implementations
+could easily be added, and to receive temperature updates over MQTT in a format
+described later in this README.
 
 This has been tested with the Danfoss RF transciever code in the thermostat.git
 repository at https://github.com/adpeace/thermostat.git.
@@ -10,6 +14,26 @@ No warranty is provided: please be careful if you are messing with your own
 heating system.
 
 For more information, please see https://hackingathome.wordpress.com.
+
+## The scheduler
+
+The scheduler comes in three parts:
+
+1.  The database.  You need to be running postgres; once you have installed
+postgres you can create a database user and database for the scheduler, then
+user scheduler.sql to create the requisite tables.  (This currently assumes the
+databsae and a role exists called `scheduler`.)
+
+2.  The controller.  This is the `scheduler.py` Python script.  You'll need to
+have a configuration file for this to work: see below for more info.  Then, just
+ensure this daemon is running to push temperature updates to the boiler
+controller.
+
+3.  The web app.  This is the `schedulerweb.py` Flask app.  The recommended
+configuration is for this to be proxied through nginx and run inside uwsgi.
+
+You'll need to the running the `maintaintemp` service also described below to
+issue commands to your boiler.
 
 ## boiler\_to\_mqtt.py
 
@@ -33,7 +57,7 @@ temperature.
 Example usage:
 
 ```
-./maintaintemp.py emon_sensors/emonth5 0xBAB1 19.5
+./maintaintemp.py emon_sensors/emonth5 0xBAB1
 ```
 
 The first argument is an MQTT topic from which to get temperature updates.
@@ -61,10 +85,17 @@ done
 The ```heating/deamnd``` topic should match the configuration file you set up -
 see below for more information.
 
-The final argument is the target temperature.
+The scheduler, mentioend above, will issue commands to this script to set the
+target temperature.  If you don't want to use the scheduler, you can publish
+messages to the MQTT topic listed as the ```target_temp_topic``` in your
+configuration file.  These should be of the form:
 
-For a description of the behaviour of this program, please see the blog entry on
-the website mentioned above.
+```
+{target: 19.5}
+```
+
+For a broad description of the behaviour of this program, please see the blog
+entry on the website mentioned above.
 
 ## sim.py
 
@@ -134,4 +165,13 @@ password = imnottellingyou
 [heating]
 info_basetopic = heating/zone/info
 demand_request_topic = heating/demand
+temperature_sensor_topic = emon_sensors/emonth5
+target_temp_topic = heating/thermostat/target_temp
+thermostat_status_topic = heating/thermostat/status
+thermostat_schedule_change_topic = heating/thermostat_control/update
+
+scheduler_db_host = hub.lan
+scheduler_db_name = scheduler
+scheduler_db_user = scheduler
+scheduler_db_password = imnottellingyou
 ```
