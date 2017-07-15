@@ -3,24 +3,9 @@
 import argparse
 import serial
 import sys
-import ConfigParser
+import config
 import paho.mqtt.client as mqtt
 import json
-
-CONFIG_PATH = '/etc/sensors/config'
-
-def load_config(path):
-    cfg = ConfigParser.RawConfigParser()
-    with open(path, 'r') as f:
-        cfg.readfp(f)
-
-    return {
-        'mqtt_host': cfg.get('mqtt', 'host'),
-        'mqtt_user': cfg.get('mqtt', 'user'),
-        'mqtt_password': cfg.get('mqtt', 'password'),
-        'heating_zone_basetopic': cfg.get('heating', 'info_basetopic'),
-        'heating_demand_topic': cfg.get('heating', 'demand_request_topic'),
-        }
 
 def on_connect(client, userdata, flags, rc):
     if rc:
@@ -29,7 +14,6 @@ def on_connect(client, userdata, flags, rc):
     print "Subscribing to %s" % userdata['demand_topic']
     client.subscribe(userdata['demand_topic'])
 
-# I'm not sure this is a good idea...
 def on_message(client, userdata, msg):
     if msg.topic != userdata['demand_topic']:
         return
@@ -84,6 +68,9 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic):
         client.loop_stop()
 
 if __name__ == "__main__":
-    conf = load_config(CONFIG_PATH)
-    main(conf['mqtt_host'], conf['mqtt_user'], conf['mqtt_password'],
-         conf['heating_zone_basetopic'], conf['heating_demand_topic'])
+    conf = config.load_config()
+    main(conf.get('mqtt', 'host'),
+         conf.get('mqtt', 'user'),
+         conf.get('mqtt', 'password'),
+         conf.get('heating', 'info_basetopic'),
+         conf.get('heating', 'demand_request_topic'))

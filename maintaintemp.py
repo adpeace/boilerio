@@ -3,7 +3,7 @@
 import datetime
 import logging
 import argparse
-import ConfigParser
+import config
 import paho.mqtt.client as mqtt
 import json
 import time
@@ -14,26 +14,6 @@ import pid
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-# Global configuration
-
-CONFIG_PATH = '/etc/sensors/config'
-
-def load_config(path):
-    cfg = ConfigParser.RawConfigParser()
-    with open(path, 'r') as f:
-        cfg.readfp(f)
-
-    return {
-        'zone_demand_topic': cfg.get('heating', 'demand_request_topic'),
-        'target_temp_topic': cfg.get('heating',
-                                     'target_temp_topic'),
-        'thermostat_status_topic': cfg.get('heating',
-                                           'thermostat_status_topic'),
-        'mqtt_host': cfg.get('mqtt', 'host'),
-        'mqtt_user': cfg.get('mqtt', 'user'),
-        'mqtt_password': cfg.get('mqtt', 'password'),
-        }
 
 # Settings:
 
@@ -320,11 +300,11 @@ def on_message(client, userdata, msg):
         target_update()
 
 def maintain_temp(sensor_topic, thermostat_id, dry_run):
-    conf = load_config(CONFIG_PATH)
+    conf = config.load_config()
     mqttc = mqtt.Client()
     if not dry_run:
-        boiler_control = MqttBoilerControl(thermostat_id, mqttc,
-                                          conf['zone_demand_topic'])
+        boiler_control = MqttBoilerControl(
+            thermostat_id, mqttc, conf.get('heating', 'demand_request_topic'))
     else:
         boiler_control = None
     state = State(boiler_control)
@@ -332,16 +312,19 @@ def maintain_temp(sensor_topic, thermostat_id, dry_run):
     mqttc.user_data_set({
         'state': state,
         'tempsensor': sensor_topic,
-        'target_temp': conf['target_temp_topic'],
-        'thermostat_status_topic': conf['thermostat_status_topic'],
+        'target_temp': conf.get('heating', 'target_temp_topic'),
+        'thermostat_status_topic': conf.get('heating',
+                                            'thermostat_status_topic'),
         'thermostat_id': thermostat_id,
         })
     mqttc.on_connect = on_connect
     mqttc.on_message = on_message
-    mqttc.username_pw_set(conf['mqtt_user'], conf['mqtt_password'])
-    mqttc.will_set(conf['thermostat_status_topic'], json.dumps({
-        'thermostat_id': thermostat_id, 'status': 'offline'}))
-    mqttc.connect(conf['mqtt_host'], 1883, 60)
+    mqttc.username_pw_set(conf.get('mqtt', 'user'),
+                          conf.get('mqtt', 'password'))
+    mqttc.will_set(
+        conf.get('heating', 'thermostat_status_topic'),
+        json.dumps({'thermostat_id': thermostat_id, 'status': 'offline'}))
+    mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
 
     mqttc.loop_start()
     while True:
