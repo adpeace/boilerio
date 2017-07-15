@@ -320,6 +320,8 @@ def on_message(client, userdata, msg):
         target_update()
 
 def maintain_temp(sensor_topic, thermostat_id, dry_run):
+    conf = load_config(CONFIG_PATH)
+    mqttc = mqtt.Client()
     if not dry_run:
         boiler_control = MqttBoilerControl(thermostat_id, mqttc,
                                           conf['zone_demand_topic'])
@@ -327,8 +329,7 @@ def maintain_temp(sensor_topic, thermostat_id, dry_run):
         boiler_control = None
     state = State(boiler_control)
 
-    conf = load_config(CONFIG_PATH)
-    mqttc = mqtt.Client(userdata={
+    mqttc.user_data_set({
         'state': state,
         'tempsensor': sensor_topic,
         'target_temp': conf['target_temp_topic'],
