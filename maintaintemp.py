@@ -291,7 +291,7 @@ def on_message(client, userdata, msg):
         try:
             target = float(json.loads(msg.payload)['target'])
             userdata['state'].updateTargetTemperature(target)
-        except KeyError, ValueError:
+        except (KeyError, ValueError):
             pass
 
     if msg.topic == userdata['tempsensor']:

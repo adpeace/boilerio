@@ -35,7 +35,8 @@ def on_message(client, userdata, msg):
     userdata['sensor_file'].write("{}{}\n".format(
         request['command'], hex(request['thermostat'])))
 
-def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic):
+def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
+         sensor_filename):
     userdata = {'demand_topic': demand_topic}
 
     client = mqtt.Client(userdata=userdata)
@@ -57,6 +58,10 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic):
                     direction, tid, cmd = data.split()
                 except:
                     continue
+                if direction not in ['SEND', 'RECV'] or \
+                   cmd not in ['ON', 'OFF', 'LEARN']:
+                    print "Couldn't parse input: {}".format(data)
+                    continue
                 print "Publishing to {}/{} : {}".format(
                     zone_basetopic, tid, json.dumps({'direction': direction,
                                                      'cmd': cmd}))
@@ -68,9 +73,17 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic):
         client.loop_stop()
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description='Interface between MQTT and serial-controlled '
+                    'heating relay')
+    parser.add_argument('device_path',
+                        help="Path to serial device for relay controller, "
+                             "e.g. /dev/ttyUSB0")
+    args = parser.parse_args()
     conf = config.load_config()
     main(conf.get('mqtt', 'host'),
          conf.get('mqtt', 'user'),
          conf.get('mqtt', 'password'),
          conf.get('heating', 'info_basetopic'),
-         conf.get('heating', 'demand_request_topic'))
+         conf.get('heating', 'demand_request_topic'),
+         args.device_path)
