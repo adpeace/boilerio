@@ -80,7 +80,7 @@ def run_simulation(start_temp, target_temp, sim_duration_mins,
     house = House(start_temp)
     boiler = FakeBoiler(house)
     state = maintaintemp.State(boiler)
-    state.updateTargetTemperature(target_temp)
+    state.update_target_temperature(target_temp)
 
     # Start time doesn't really matter:
     now = start = datetime.datetime(2000, 1, 1, 0, 0)
@@ -93,7 +93,7 @@ def run_simulation(start_temp, target_temp, sim_duration_mins,
                 new_target = sched_target
         if new_target != target_temp:
             target_temp = new_target
-            state.updateTargetTemperature(target_temp)
+            state.update_target_temperature(target_temp)
 
         boiler_on = 0
         for _ in range(60):
@@ -106,16 +106,16 @@ def run_simulation(start_temp, target_temp, sim_duration_mins,
             room_temp_with_error = house.room_temp - 0.05 + 0.1 * random.random()
         else:
             room_temp_with_error = house.room_temp
-        state.updateTemperature(room_temp_with_error)
-        dutyCycle = state.pwmDutyCycle.total_seconds() \
-                    if state.pwmDutyCycle else 0
-        dutyCycle = float(dutyCycle) / maintaintemp.PWM_PERIOD.total_seconds()
+        state.update_temperature(room_temp_with_error)
+        duty_cycle = state.pwmDutyCycle.total_seconds() \
+                     if state.pwmDutyCycle else 0
+        duty_cycle = float(duty_cycle) / maintaintemp.PWM_PERIOD.total_seconds()
         print (now - start).total_seconds() / 60, target_temp, boiler_on, \
-              dutyCycle, house.room_temp, room_temp_with_error, \
+              duty_cycle, house.room_temp, room_temp_with_error, \
               state.pid.last_prop, state.pid.error_integral, \
               state.pid.last_diff
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", dest="random", action="store_true",
                         help="Incorporate randomness into fake readings")
@@ -125,3 +125,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     run_simulation(args.start_temp, args.target_temp, args.runtime,
                    args.random)
+
+if __name__ == "__main__":
+    main()

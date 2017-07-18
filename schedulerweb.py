@@ -6,7 +6,7 @@ from flask import Flask, jsonify, request, g
 import datetime
 
 import model
-from scheduler import *
+from scheduler import SchedulerTemperaturePolicy
 from config import load_config
 
 from flask import send_from_directory

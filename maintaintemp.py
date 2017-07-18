@@ -3,11 +3,12 @@
 import datetime
 import logging
 import argparse
-import config
-import paho.mqtt.client as mqtt
 import json
 import time
 
+import paho.mqtt.client as mqtt
+
+import config
 import pwm
 import pid
 
@@ -65,10 +66,10 @@ class BoilerPWM(pwm.PWM):
         super(BoilerPWM, self).__init__(dutycycle, pwmperiod)
 
     def on(self):
-        self.state.boilerCommand(BOILER_COMMAND_ON)
+        self.state.boiler_command(BOILER_COMMAND_ON)
 
     def off(self):
-        self.state.boilerCommand(BOILER_COMMAND_OFF)
+        self.state.boiler_command(BOILER_COMMAND_OFF)
 
 # Global state:
 
@@ -88,14 +89,14 @@ class State(object):
         self.targetTemp = None
         self.boilerControl = boiler_control
 
-    def updateTargetTemperature(self, target):
+    def update_target_temperature(self, target):
         if target != self.targetTemp:
             logger.info("Target temperature changed from %s to %s",
                         str(self.targetTemp), target)
             self.targetTemp = target
             self.pid.reset(target)
 
-    def updateState(self, new_state):
+    def update_state(self, new_state):
         if self.state != new_state:
             oldname, _, _ = ("None", None, None) if not self.state \
                             else state_fns[self.state]
@@ -107,7 +108,7 @@ class State(object):
             if enter:
                 enter(self)
 
-    def boilerCommand(self, cmd):
+    def boiler_command(self, cmd):
         if self.lastCommand is None or \
            self.now - self.lastCommand.when > REISSUE_TIMEOUT or \
            self.lastCommand.cmd != cmd:
@@ -117,28 +118,28 @@ class State(object):
                 self.boilerControl.command(cmd)
             self.lastCommand = TempCommand(self.now, cmd)
 
-    def lastTemperature(self):
+    def last_temperature(self):
         return None if self.lastReading is None \
                else self.lastReading.temp
 
-    def targetZoneMax(self):
+    def target_zone_max(self):
         return self.targetTemp + TARGET_ZONE_WIDTH / 2
-    def targetZoneMin(self):
+    def target_zone_min(self):
         return self.targetTemp - TARGET_ZONE_WIDTH / 2
 
-    def temperatureReadingStale(self):
+    def temperature_reading_stale(self):
         return self.targetTemp is None or \
                self.lastReading is None or \
                self.lastReading.when < (self.now - STALE_THRESHOLD)
 
-    def updateDutyCycle(self, dc):
+    def update_duty_cycle(self, dc):
         self.pwmDutyCycle = datetime.timedelta(0, PWM_PERIOD.total_seconds() * dc)
         if not self.pwmBoilerCycle:
             self.pwmBoilerCycle = BoilerPWM(self, self.pwmDutyCycle, PWM_PERIOD)
         else:
             self.pwmBoilerCycle.setDutyCycle(self.pwmDutyCycle)
 
-    def updateTemperature(self, temp):
+    def update_temperature(self, temp):
         self.lastReading = TempReading(self.now, temp)
         logger.debug("Temperature update: %s", str(temp))
 
@@ -159,48 +160,48 @@ class TempCommand(object):
 def mode_off(state):
     # If we moved below the top of the target zone, set the state
     # accordingly
-    if state.lastTemperature() < state.targetZoneMin():
-        state.updateState(MODE_ON)
-    elif state.lastTemperature() < state.targetTemp:
-        state.updateState(MODE_PWM)
+    if state.last_temperature() < state.target_zone_min():
+        state.update_state(MODE_ON)
+    elif state.last_temperature() < state.targetTemp:
+        state.update_state(MODE_PWM)
     else:
-        state.boilerCommand(BOILER_COMMAND_OFF)
+        state.boiler_command(BOILER_COMMAND_OFF)
 
 def mode_on(state):
     # If for some reason (unexpectedly) we ended up above the target zone,
     # switch heating off:
-    if state.lastTemperature() > state.targetZoneMax():
+    if state.last_temperature() > state.target_zone_max():
         logger.warn("Temperature got above target zone from MODE_ON")
-        state.boilerCommand(BOILER_COMMAND_OFF)
-        state.updateState(MODE_OFF)
+        state.boiler_command(BOILER_COMMAND_OFF)
+        state.update_state(MODE_OFF)
         return
 
     # If we are within target zone, switch to the PID controller:
-    if state.lastTemperature() >= (state.targetTemp - TARGET_ZONE_WIDTH / 2):
+    if state.last_temperature() >= (state.targetTemp - TARGET_ZONE_WIDTH / 2):
         logger.info("Temperature in target zone")
-        state.boilerCommand(BOILER_COMMAND_OFF)
-        state.updateState(MODE_PWM)
+        state.boiler_command(BOILER_COMMAND_OFF)
+        state.update_state(MODE_PWM)
         return
 
     # Otherwise, just keep the boiler going:
-    state.boilerCommand(BOILER_COMMAND_ON)
+    state.boiler_command(BOILER_COMMAND_ON)
 
 def mode_pwm_enter(state):
     # Record the temperature target when we enter, so that we know whether
     # to keep state on exit (i.e. if we messed up and temperature left the
     # target zone even though the target didn't change).
     state.pwmBoilerCycle = BoilerPWM(state, datetime.timedelta(0), PWM_PERIOD)
-    state.pid.setLastValue(state.lastTemperature())
+    state.pid.setLastValue(state.last_temperature())
 
 def mode_pwm(state):
     # If we go outside the target zone, switch modes:
-    if state.lastTemperature() > state.targetZoneMax():
+    if state.last_temperature() > state.target_zone_max():
         logger.error("Exceeded target zone in PWM mode")
-        state.updateState(MODE_OFF)
+        state.update_state(MODE_OFF)
         return
-    if state.lastTemperature() < state.targetZoneMin():
+    if state.last_temperature() < state.target_zone_min():
         logger.error("Dropped below target zone in PWM mode")
-        state.updateState(MODE_ON)
+        state.update_state(MODE_ON)
         return
 
     # New measurement cycle?
@@ -208,8 +209,8 @@ def mode_pwm(state):
        state.pwmMeasurementBegin + PWM_MEASUREMENT_PERIOD < state.now:
         state.pwmMeasurementBegin = state.now
         # Adjust duty cycle:
-        pid_output = state.pid.update(state.lastTemperature())
-        state.updateDutyCycle(pid_output)
+        pid_output = state.pid.update(state.last_temperature())
+        state.update_duty_cycle(pid_output)
 
         logger.debug("PID ouutput: %f", pid_output)
         logger.debug("PID internals: prop %f, int %f, diff %f",
@@ -223,7 +224,7 @@ def mode_stale(state):
     # Ideally we'd cycle the zone periodically to avoid freezing, given we
     # don't have information to do anything better.  For now, just turn the
     # zone off:
-    state.boilerCommand(BOILER_COMMAND_OFF)
+    state.boiler_command(BOILER_COMMAND_OFF)
 
 # Mode -> (Mode fn, enter fn)
 state_fns = {
@@ -234,18 +235,18 @@ state_fns = {
     }
 
 def period(state):
-    if state.temperatureReadingStale():
+    if state.temperature_reading_stale():
         # Don't use stale temperature readings to make decisions:
-        state.updateState(MODE_STALE)
+        state.update_state(MODE_STALE)
     elif state.state is None or state.state == MODE_STALE:
         # If we just a reading after having had stale or no data, pick
         # a starting state from scratch:
-        if state.lastTemperature() < (state.targetTemp - TARGET_ZONE_WIDTH / 2):
-            state.updateState(MODE_ON)
-        elif state.lastTemperature() > (state.targetTemp + TARGET_ZONE_WIDTH / 2):
-            state.updateState(MODE_OFF)
+        if state.last_temperature() < (state.targetTemp - TARGET_ZONE_WIDTH / 2):
+            state.update_state(MODE_ON)
+        elif state.last_temperature() > (state.targetTemp + TARGET_ZONE_WIDTH / 2):
+            state.update_state(MODE_OFF)
         else:
-            state.updateState(MODE_PWM)
+            state.update_state(MODE_PWM)
 
     # Now do whatever we're supposed to in this state:
     _, state_fn, _ = state_fns[state.state]
@@ -277,20 +278,20 @@ def on_message(client, userdata, msg):
 
         now = datetime.datetime.now()
         state.now = now
-        state.updateTemperature(temp)
+        state.update_temperature(temp)
 
         # Print information for debugging/graphing:
         duty_cycle = state.pwmDutyCycle.total_seconds() \
                      if state.pwmDutyCycle else 0
         print now, state.targetTemp, state.lastCommand.cmd, duty_cycle, \
-              state.lastTemperature(), state.pid.last_prop, \
+              state.last_temperature(), state.pid.last_prop, \
               state.pid.error_integral, state.pid.last_diff
 
     def target_update():
         # Payload should be dictionary with key 'target':
         try:
             target = float(json.loads(msg.payload)['target'])
-            userdata['state'].updateTargetTemperature(target)
+            userdata['state'].update_target_temperature(target)
         except (KeyError, ValueError):
             pass
 
@@ -332,7 +333,7 @@ def maintain_temp(sensor_topic, thermostat_id, dry_run):
         state.now = datetime.datetime.now()
         period(state)
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Maintain target temperature")
     parser.add_argument("-n", action="store_true", dest="dry_run")
     parser.add_argument("sensor_topic")
@@ -340,3 +341,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     maintain_temp(args.sensor_topic, int(args.thermostat_id, 0), args.dry_run)
+
+if __name__ == "__main__":
+    main()
