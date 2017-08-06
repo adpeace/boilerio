@@ -33,21 +33,26 @@ def close_db(error):
     if hasattr(g, 'db'):
         g.db.close()
 
+def get_tgt_override_json(db):
+    target_override_obj = model.TargetOverride.from_db(db)
+    if target_override_obj:
+        return {
+            'until': target_override_obj.end.strftime("%Y-%m-%dT%H:%M"),
+            'temp': target_override_obj.temp
+            }
+    else:
+        return {}
+
 @app.route("/summary")
 def get_summary():
     now = datetime.datetime.now()
     db = get_db()
 
-    target_override_obj = model.TargetOverride.from_db(db)
-    target_override = {
-        'until': target_override_obj.end.strftime("%H:%M"),
-        'temp': target_override_obj.temp
-        } if target_override_obj and target_override_obj.end > now \
-        else {}
-
     schedule = model.FullSchedule.from_db(db)
+    tgt_override = get_tgt_override_json(db)
+    tgt_override_obj = model.TargetOverride.from_db(db)
     scheduler = SchedulerTemperaturePolicy(
-        schedule, target_override_obj)
+        schedule, tgt_override_obj)
     target = scheduler.target(now)
 
     today = scheduler.get_day(now.weekday())
@@ -55,15 +60,16 @@ def get_summary():
              for (starttime, temp) in today]
 
     db.commit()
-    return jsonify({
+    result = {
         'target': target[0],
         'target_entry': target[1],
         'target_overridden': target[1] == -2,
         'current': model.get_last_temperature(db).temp,
         'server_day_of_week': now.weekday(),
         'today': today,
-        'target_override': target_override,
-        })
+        'target_override': tgt_override,
+        }
+    return jsonify(result)
 
 @app.route("/target_override", methods=["DELETE"])
 def remove_target_override():
@@ -87,8 +93,12 @@ def get_schedule():
             'time': entry_start.strftime('%H:%M'),
             'temp': entry_temp
             })
+    tgt_override = get_tgt_override_json(db)
     db.commit()
-    return jsonify(json_schedule)
+    return jsonify({
+        'schedule': json_schedule,
+        'target_override': tgt_override
+        })
 
 @app.route("/schedule/new_entry", methods=["POST"])
 def add_schedule_entry():

@@ -32,8 +32,8 @@ def get_last_temperature(db):
 
 class FullSchedule(object):
     """ The heating schedule. """
-    def __init__(self):
-        self.entries = []
+    def __init__(self, entries):
+        self.entries = entries
 
     def __iter__(self):
         return self.entries.__iter__()
@@ -59,13 +59,13 @@ class FullSchedule(object):
     @classmethod
     def from_db(cls, db):
         """ Create a schedule class instance from the database. """
-        self = cls()
         cursor = db.cursor()
         cursor.execute("select day, starttime, temp from schedule "
                        "order by day, starttime")
+        entries = []
         for record in cursor:
-            self.entries.append(record)
-        return self
+            entries.append(record)
+        return cls(entries)
 
 class TempReading(object):
     """ Convenience class representing a temperature reading. """

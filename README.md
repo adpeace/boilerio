@@ -174,4 +174,6 @@ scheduler_db_host = hub.lan
 scheduler_db_name = scheduler
 scheduler_db_user = scheduler
 scheduler_db_password = imnottellingyou
+
+scheduler_url = http://localhost/api
 ```

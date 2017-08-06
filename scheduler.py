@@ -2,12 +2,13 @@
 
 """Operate heating schedule."""
 
+import sys
 import json
 import datetime
 import threading
 import paho.mqtt.client as mqtt
-import psycopg2
 import logging
+import requests
 
 import model
 import config
@@ -15,6 +16,8 @@ import config
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+strptime = datetime.datetime.strptime
 
 def get_db(conf):
     db = model.db_connect(
@@ -32,13 +35,29 @@ class SchedulerTemperaturePolicy(object):
         self.target_override = tgt_override
 
     @classmethod
-    def from_db(cls, db):
-        tgt_override = model.TargetOverride.from_db(db)
-        full_schedule = model.FullSchedule.from_db(db)
-        return cls(full_schedule, tgt_override)
+    def from_json(cls, j):
+        data = json.loads(j)
+
+        entries = []
+        for day in sorted(data['schedule']):
+            for item in data['schedule'][day]:
+                entries.append((
+                    int(day),
+                    strptime(item['time'], "%H:%M").time(),
+                    item['temp']
+                    ))
+        schedule = model.FullSchedule(entries)
+        tgt_override = data['target_override']
+        if all(x in tgt_override for x in ['temp', 'until']):
+            tgt_override_obj = model.TargetOverride(
+                strptime(tgt_override['until'], '%Y-%m-%dT%H:%M'),
+                tgt_override['temp'])
+        else:
+            tgt_override = None
+        return cls(schedule, tgt_override_obj)
 
     def get_day(self, day):
-        """Determine the schedule for today.
+        """Determine the schedule for today covering the full 24h.
 
         Uses the overall schedule and any schedule overrides (but not
         target tmperature overrides) in place.
@@ -121,11 +140,12 @@ def mqtt_on_message(client, userdata, msg):
             except ValueError:
                 pass
 
-def on_timer(mqttc, conf, db):
+def on_timer(mqttc, conf, sched):
     now = datetime.datetime.now()
 
-    scheduler = SchedulerTemperaturePolicy.from_db(db)
+    scheduler = SchedulerTemperaturePolicy.from_json(sched)
     target = scheduler.target(now)
+    logger.info("Publishing temperature update: %d", target[0])
     mqttc.publish(conf.get('heating', 'target_temp_topic'),
                   json.dumps({'target': target[0]}))
 
@@ -148,15 +168,16 @@ def main():
     mqttc.on_message = mqtt_on_message
     mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
 
+    if len(sys.argv) == 2:
+        scheduler_url = sys.argv[1]
+    else:
+        scheduler_url = conf.get('heating', 'scheduler_url')
+
     mqttc.loop_start()
     while True:
-        # Reconnecting to the database isn't great but it is better than
-        # having this long-lived process break if the db goes away
-        # temporarily
         try:
-            db = get_db(conf)
-            on_timer(mqttc, conf, db)
-            db.close()
+            r = requests.get(scheduler_url + "/schedule").text
+            on_timer(mqttc, conf, r)
         except psycopg2.OperationalError:
             logger.error("Failed interval due to database error")
 

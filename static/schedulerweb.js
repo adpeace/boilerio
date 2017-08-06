@@ -192,6 +192,7 @@ renderFullSchedule = function(schedule) {
     $("#title").html('<a href="#summary"><i class="material-icons">' +
                      'arrow_back</i></a> Edit Schedule');
     var schedule_div = $("<div>").attr('id', 'app');
+    schedule = schedule.schedule;
 
     /* Render each day's schedule */
     for (var i = 0; i < 7; i++) {
@@ -235,8 +236,8 @@ renderSummary = function(summary) {
 
     var page = $("<div>").addClass("page");
     page.append(renderSchedule(summary.today,
-                                summary.server_day_of_week,
-                                summary.target_entry));
+                               summary.server_day_of_week,
+                               summary.target_entry));
     page.append('<div class="buttons">' +
                 '<button onclick="window.location.hash = ' +
                 ' \'#edit_schedule\'" class="flat">Edit Schedule</button>' +
