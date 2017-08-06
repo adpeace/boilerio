@@ -1,15 +1,11 @@
 #!/usr/bin/env python
 
-import json
-import ConfigParser
-from flask import Flask, jsonify, request, g
 import datetime
+from flask import Flask, jsonify, request, g
 
 import model
 from scheduler import SchedulerTemperaturePolicy
 from config import load_config
-
-from flask import send_from_directory
 
 app = Flask(__name__)
 
@@ -108,10 +104,10 @@ def add_schedule_entry():
         time = datetime.datetime.strptime(request.values['time'], "%H:%M")
         time = time.time()
         day = int(request.values['day'])
-        if not (0 <= day and day < 7):
+        if not (day >= 0 and day < 7):
             raise ValueError("Day of week must be in range 0 to 7")
         temp = float(request.values['temp'])
-        if not (0 <= temp and temp < 35):
+        if not (temp >= 0 and temp < 35):
             raise ValueError("Target tempt must be in range 0 to 35")
     except ValueError:
         return ('', 400)
@@ -126,7 +122,7 @@ def remove_schedule_entry():
         time = datetime.datetime.strptime(request.values['time'], "%H:%M")
         time = time.time()
         day = int(request.values['day'])
-        if not (0 <= day and day < 7):
+        if not (day >= 0 and day < 7):
             raise ValueError("Day of week must be in range 0 to 7")
     except ValueError:
         return ('', 400)

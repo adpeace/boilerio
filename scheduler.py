@@ -6,8 +6,8 @@ import sys
 import json
 import datetime
 import threading
-import paho.mqtt.client as mqtt
 import logging
+import paho.mqtt.client as mqtt
 import requests
 
 import model
@@ -79,8 +79,8 @@ class SchedulerTemperaturePolicy(object):
             _, _, temp = self.schedule.entries[-1]
             candidate_beginning = temp
         # Check whether we need to fill in the start:
-        if entries[0][0] != datetime.time(0,0):
-            entries.insert(0, (datetime.time(0,0), candidate_beginning))
+        if entries[0][0] != datetime.time(0, 0):
+            entries.insert(0, (datetime.time(0, 0), candidate_beginning))
 
         return entries
 
