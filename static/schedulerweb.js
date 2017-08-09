@@ -5,13 +5,15 @@
  * MVC, but the simplicity of the first version didn't seem to merit it.
  */
 
+/* global load_summary */
+
 var weekday = {
     0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday",
     4: "Friday", 5: "Saturday", 6: "Sunday"
 };
 
 /* Clear existing override */
-var clear_override = function() {
+function clear_override() {
     $.ajax({
         url: 'api//target_override',
         type: 'DELETE',
@@ -23,7 +25,7 @@ var clear_override = function() {
 /* Make UI elements for the override dialog
  *
  * override_set_ev is the function to call when an override is set. */
-var mk_override = function(override_set_ev) {
+function mk_override(override_set_ev) {
     var cancel_click = function() {
         $("#override").hide();
     };
@@ -34,9 +36,9 @@ var mk_override = function(override_set_ev) {
             url: "api//target_override",
             data: {hours: hours_val, temp: temp_val},
             success: function(data) { override_set_ev(); }
-            });
+        });
         return false;
-    }
+    };
 
     var override = $("<div>").addClass("modal")
                              .attr('id', 'override');
@@ -66,7 +68,8 @@ var mk_override = function(override_set_ev) {
  * highlighted_entry is the index of a highlighted entry
  * editable is a flag indicating whether to include controls to edit the
  *          schedule. */
-renderSchedule = function(sched, dow, highlighted_entry, editable) {
+/* exported renderSchedule */
+function renderSchedule(sched, dow, highlighted_entry, editable) {
     var mk_row = function(start, end, temp) {
         var tr = $("<tr>");
         var td_start = $("<td>").text(start);
@@ -83,13 +86,13 @@ renderSchedule = function(sched, dow, highlighted_entry, editable) {
 
         tr.append(td_start);
         if (!editable)
-            tr.append(td_end)
+            tr.append(td_end);
         tr.append(td_temp);
         if (editable)
             tr.append(td_remove);
 
         return tr;
-    }
+    };
     var add_click = function() {
         var timeval = $("#time_" + dow)[0].value;
         var tempval = $("#temp_" + dow)[0].value;
@@ -135,7 +138,7 @@ renderSchedule = function(sched, dow, highlighted_entry, editable) {
     var table_sched = $("<table>");
     var head = $("<tr>").append($("<td>").text("Start"));
     if (!editable)
-        head.append($("<td>").text("End"))
+        head.append($("<td>").text("End"));
     head.append($("<td>").text("Target"));
     head.addClass("head");
     if (editable)
@@ -155,14 +158,14 @@ renderSchedule = function(sched, dow, highlighted_entry, editable) {
         var tr_add = $("<tr>");
         var keyfn = function(e) {
             if (e.which == 13)
-                $("button#add_" + dow).click()
+                $("button#add_" + dow).click();
         };
         var timefield = $('<input type="time" placeholder="HH:MM">');
         timefield.attr("id", "time_" + dow);
         timefield.keypress(keyfn);
 
         var tempfield = $('<input type="number" placeholder="Celsius">');
-        tempfield.attr("id", "temp_" + dow)
+        tempfield.attr("id", "temp_" + dow);
         tempfield.keypress(keyfn);
 
         var td_add_time = $("<td>").append(timefield);
@@ -187,7 +190,8 @@ renderSchedule = function(sched, dow, highlighted_entry, editable) {
 /* Updates the application with a full, editable, schedule.
  * schedule is an array object containing the schedule, i.e. each at
  *          index is an object with a time and temp field. */
-renderFullSchedule = function(schedule) {
+/* exported renderFullSchedule */
+function renderFullSchedule(schedule) {
     /* Set up app title bar: */
     $("#title").html('<a href="#summary"><i class="material-icons">' +
                      'arrow_back</i></a> Edit Schedule');
@@ -213,7 +217,8 @@ renderFullSchedule = function(schedule) {
  *    server_day_of_week: the current day of week according to the server
  *    target_entry: index of the current active entry
  *    today: full schedule for today. */
-renderSummary = function(summary) {
+/* exported renderSummary */
+function renderSummary(summary) {
     /* Set up app title bar: */
     $("#title").text("Today");
 
@@ -224,7 +229,7 @@ renderSummary = function(summary) {
     var current = $("<div>").attr("id", "current");
     current.append($("<h1>").text(current_val).append("&deg;C"));
 
-    var target = $("<p>").text(summary.target.toString())
+    var target = $("<p>").text(summary.target.toString());
     target.prepend(summary.target_overridden ? "Override: "
                                              : "Target: ")
           .append("&deg;C")
@@ -246,9 +251,6 @@ renderSummary = function(summary) {
 
     /* Override */
     if (summary.target_overridden) {
-        var override_click = function() {
-            $("#override").show();
-        };
         schedule_div.append(
             $("<button>").addClass("floating")
                          .html('<i class="material-icons">clear</i>')
@@ -266,5 +268,5 @@ renderSummary = function(summary) {
     schedule_div.append(page);
 
     $("#app").replaceWith(schedule_div);
-};
+}
 
