@@ -163,6 +163,9 @@ user = user
 password = imnottellingyou
 
 [heating]
+# Various MQTT topic names to use.  These can be anything but are specified in
+# the config in case you have other software that constrains your choices, and
+# ensures they are consistent across apps.
 info_basetopic = heating/zone/info
 demand_request_topic = heating/demand
 temperature_sensor_topic = emon_sensors/emonth5
@@ -176,4 +179,9 @@ scheduler_db_user = scheduler
 scheduler_db_password = imnottellingyou
 
 scheduler_url = http://localhost/api
+
+# Optional username and password.  If provided, they are used with HTTP basic
+# auth to talk to the scheduler.
+scheduler_username = username
+scheduler_password = imnottellingyou
 ```

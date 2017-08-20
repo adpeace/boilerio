@@ -9,6 +9,7 @@ import threading
 import logging
 import paho.mqtt.client as mqtt
 import requests
+from requests.auth import HTTPBasicAuth
 
 import model
 import config
@@ -168,6 +169,17 @@ def main():
     mqttc.on_message = mqtt_on_message
     mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
 
+    # If the 'heating' section of the config has a 'scheduler_username' and
+    # 'scheduler_password' entry, we use these with HTTP basic auth.
+    if conf.has_option('heating', 'scheduler_username') and \
+       conf.has_option('heating', 'scheduler_password'):
+        logger.info("Using HTTP basic authentication")
+        auth = HTTPBasicAuth(conf.get('heating', 'scheduler_username'),
+                             conf.get('heating', 'scheduler_password'))
+    else:
+        logger.info("Not using HTTP authentication")
+        auth = None
+
     if len(sys.argv) == 2:
         scheduler_url = sys.argv[1]
     else:
@@ -176,10 +188,12 @@ def main():
     mqttc.loop_start()
     while True:
         try:
-            r = requests.get(scheduler_url + "/schedule").text
-            on_timer(mqttc, conf, r)
-        except psycopg2.OperationalError:
-            logger.error("Failed interval due to database error")
+            r = requests.get(scheduler_url + "/schedule", auth=auth)
+            if r.status_code != 200:
+                raise RuntimeError, "Couldn't get schedule (%d)" % r.status_code
+            on_timer(mqttc, conf, r.text)
+        except Exception, e:
+            logger.error("Failed interval (%s)", str(e))
 
         period_event.wait(timeout=60)
         period_event.clear()
