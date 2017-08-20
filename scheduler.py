@@ -9,6 +9,7 @@ import threading
 import logging
 import paho.mqtt.client as mqtt
 import requests
+import requests.exceptions
 from requests.auth import HTTPBasicAuth
 
 import model
@@ -141,14 +142,26 @@ def mqtt_on_message(client, userdata, msg):
             except ValueError:
                 pass
 
-def on_timer(mqttc, conf, sched):
-    now = datetime.datetime.now()
+def scheduler_iteration(mqttc, target_temp_topic, scheduler_url, auth):
+    """Fetch schedule, determine target and set it.
 
-    scheduler = SchedulerTemperaturePolicy.from_json(sched)
-    target = scheduler.target(now)
+    Has no return value and swallows any exceptions fetching the schedule,
+    etc., with the intention that a daemon can use this function in a simple
+    loop and the correct behaviour will result."""
+    try:
+        r = requests.get(scheduler_url + "/schedule", auth=auth, timeout=10)
+    except requests.exceptions.RequestException as e:
+        logger.error("Failed interval (%s)", str(e))
+        return
+
+    if r.status_code != 200:
+        logger.error("Couldn't get schedule (%d)", r.status_code)
+        return
+
+    scheduler = SchedulerTemperaturePolicy.from_json(r.text)
+    target = scheduler.target(datetime.datetime.now())
     logger.info("Publishing temperature update: %d", target[0])
-    mqttc.publish(conf.get('heating', 'target_temp_topic'),
-                  json.dumps({'target': target[0]}))
+    mqttc.publish(target_temp_topic, json.dumps({'target': target[0]}))
 
 def main():
     conf = config.load_config()
@@ -187,14 +200,8 @@ def main():
 
     mqttc.loop_start()
     while True:
-        try:
-            r = requests.get(scheduler_url + "/schedule", auth=auth)
-            if r.status_code != 200:
-                raise RuntimeError, "Couldn't get schedule (%d)" % r.status_code
-            on_timer(mqttc, conf, r.text)
-        except Exception, e:
-            logger.error("Failed interval (%s)", str(e))
-
+        scheduler_iteration(mqttc, conf.get('heating', 'target_temp_topic'),
+                            scheduler_url, auth)
         period_event.wait(timeout=60)
         period_event.clear()
 
