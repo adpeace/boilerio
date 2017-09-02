@@ -1,6 +1,6 @@
-import maintaintemp
 import pytest
 import datetime
+from boilerio import maintaintemp
 
 class FakeBoiler(maintaintemp.BoilerControl):
     def __init__(self, thermostat_id):

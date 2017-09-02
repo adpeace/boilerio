@@ -3,9 +3,9 @@
 import argparse
 import serial
 import sys
-import config
 import paho.mqtt.client as mqtt
 import json
+from boilerio import config
 
 def on_connect(client, userdata, flags, rc):
     if rc:

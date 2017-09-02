@@ -1,6 +1,5 @@
 from datetime import time, datetime
-import model
-import scheduler
+from boilerio import model, scheduler
 import requests_mock
 import requests.exceptions
 

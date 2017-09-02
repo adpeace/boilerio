@@ -10,7 +10,7 @@ fitting.
 import argparse
 import datetime
 import random
-import maintaintemp
+from boilerio import maintaintemp
 
 RAD_RAMPUP_TIME = 6
 RAD_RAMPDOWN_TIME = 25

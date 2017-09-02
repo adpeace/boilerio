@@ -2,10 +2,10 @@
 
 BoilerIO is a software thermostat.
 
-An installation of BoilerIO can control heating in a zone of your home.  Code is
-provided here to connect with Danfoss RF receivers though other implementations
-could easily be added, and to receive temperature updates over MQTT in a format
-described later in this README.
+An installation of BoilerIO can control heating in a zone of your home.  Code
+is provided here to connect with Danfoss RF receivers though other
+implementations could easily be added, and to receive temperature updates over
+MQTT in a format described later in this README.
 
 This has been tested with the Danfoss RF transciever code in the thermostat.git
 repository at https://github.com/adpeace/thermostat.git.
@@ -14,6 +14,19 @@ No warranty is provided: please be careful if you are messing with your own
 heating system.
 
 For more information, please see https://hackingathome.wordpress.com.
+
+## Installation
+
+Check out the repository, then install using `pip`:
+
+```
+$ git clone https://github.com/adpeace/boilerio.git
+$ cd boilerio
+$ pip install .
+```
+
+Use `-e` to `pip` to install in development mode (i.e. just link to the
+checked-out source instead of installing it).
 
 ## The scheduler
 
@@ -24,20 +37,20 @@ postgres you can create a database user and database for the scheduler, then
 user scheduler.sql to create the requisite tables.  (This currently assumes the
 databsae and a role exists called `scheduler`.)
 
-2.  The controller.  This is the `scheduler.py` Python script.  You'll need to
-have a configuration file for this to work: see below for more info.  Then, just
-ensure this daemon is running to push temperature updates to the boiler
+2.  The controller.  This is the `scheduler` Python script.  You'll need to
+have a configuration file for this to work: see below for more info.  Then,
+just ensure this daemon is running to push temperature updates to the boiler
 controller.
 
-3.  The web app.  This is the `schedulerweb.py` Flask app.  The recommended
+3.  The web app.  This is the `schedulerweb` Flask app.  The recommended
 configuration is for this to be proxied through nginx and run inside uwsgi.
 
 You'll need to the running the `maintaintemp` service also described below to
 issue commands to your boiler.
 
-## boiler\_to\_mqtt.py
+## boiler\_to\_mqtt
 
-The `boiler_to_mqtt.py` script implements an MQTT-topic based interface on top
+The `boiler_to_mqtt` script implements an MQTT-topic based interface on top
 of the serial protocol provided in the thermostat.git repository.  In short: it
 turns the boiler on and off via MQTT.  The serial interface in thermostat.git is
 designed to interact with a Danfoss RF thermostat receiver; if you wanted to use
@@ -49,7 +62,7 @@ boiler on/off as needed.
 This service and others in this repository use a common configuration file.  See
 below for more information.
 
-## maintaintemp.py
+## maintaintemp
 
 This is the main script and implements a PID controller to maintain a given set
 temperature.
@@ -57,7 +70,7 @@ temperature.
 Example usage:
 
 ```
-./maintaintemp.py emon_sensors/emonth5 0xBAB1
+$ maintaintemp emon_sensors/emonth5 0xBAB1
 ```
 
 The first argument is an MQTT topic from which to get temperature updates.
@@ -97,16 +110,16 @@ configuration file.  These should be of the form:
 For a broad description of the behaviour of this program, please see the blog
 entry on the website mentioned above.
 
-## sim.py
+## boilersim
 
 This is a trivial simulator intended to help debug and improve
-`maintaintemp.py`.  It follows a really simple heating/cooling model and
+`maintaintemp`.  It follows a really simple heating/cooling model and
 generates a table as output.
 
 To run, use a command-line such as:
 
 ```
-./sim.py -r 18 19.5 600
+$ boilersim -r 18 19.5 600
 ```
 
 The `-r` option introduces some random noise into the temperature readings
@@ -142,8 +155,8 @@ You can use the `plot\_sim.gpi` gnuplot script to plot the output of the
 simulation.  E.g.:
 
 ```
-./sim.py -r 18 19.5 600  2>log >sim_data
-gnuplot plot_sim.gpi
+$ boilersim -r 18 19.5 600  2>log >sim_data
+$ gnuplot plot_sim.gpi
 ```
 
 The gnuplot script assumes the simulation output is saved to a file called
@@ -151,8 +164,8 @@ The gnuplot script assumes the simulation output is saved to a file called
 
 # Config file
 
-Other than `sim.py`, a config file is needed for the programs here.  This is to
-help make them usable as daemons.
+Other than `boilersim`, a config file is needed for the programs here.  This is
+to help make them usable as daemons.
 
 Here is a sample configuration file, to be placed in `/etc/sensors/config`:
 
