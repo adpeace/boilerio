@@ -81,7 +81,7 @@ class SchedulerTemperaturePolicy(object):
             _, _, temp = self.schedule.entries[-1]
             candidate_beginning = temp
         # Check whether we need to fill in the start:
-        if entries[0][0] != datetime.time(0, 0):
+        if len(entries) == 0 or entries[0][0] != datetime.time(0, 0):
             entries.insert(0, (datetime.time(0, 0), candidate_beginning))
 
         return entries
@@ -142,7 +142,7 @@ def mqtt_on_message(client, userdata, msg):
             except ValueError:
                 pass
 
-def scheduler_iteration(mqttc, target_temp_topic, scheduler_url, auth):
+def scheduler_iteration(mqttc, target_temp_topic, scheduler_url, auth, now):
     """Fetch schedule, determine target and set it.
 
     Has no return value and swallows any exceptions fetching the schedule,
@@ -159,7 +159,7 @@ def scheduler_iteration(mqttc, target_temp_topic, scheduler_url, auth):
         return
 
     scheduler = SchedulerTemperaturePolicy.from_json(r.text)
-    target = scheduler.target(datetime.datetime.now())
+    target = scheduler.target(now)
     logger.info("Publishing temperature update: %d", target[0])
     mqttc.publish(target_temp_topic, json.dumps({'target': target[0]}))
 
@@ -201,7 +201,7 @@ def main():
     mqttc.loop_start()
     while True:
         scheduler_iteration(mqttc, conf.get('heating', 'target_temp_topic'),
-                            scheduler_url, auth)
+                            scheduler_url, auth, datetime.datetime.now())
         period_event.wait(timeout=60)
         period_event.clear()
 
