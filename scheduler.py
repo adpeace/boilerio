@@ -20,14 +20,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 strptime = datetime.datetime.strptime
-
-def get_db(conf):
-    db = model.db_connect(
-        conf.get('heating', 'scheduler_db_host'),
-        conf.get('heating', 'scheduler_db_name'),
-        conf.get('heating', 'scheduler_db_user'),
-        conf.get('heating', 'scheduler_db_password'))
-    return db
+strftime = datetime.datetime.strftime
 
 class SchedulerTemperaturePolicy(object):
     ENTRY_TARGET_OVERRIDE = -2
@@ -133,14 +126,20 @@ def mqtt_on_message(client, userdata, msg):
         data = json.loads(msg.payload)
         if 'temperature' in data:
             try:
-                db = get_db(userdata['conf'])
                 temp = float(data['temperature'])
-                model.update_last_temperature(
-                    db, datetime.datetime.now(), temp)
-                db.commit()
-                logger.info("Cached temperature update %.2f", temp)
-            except ValueError:
-                pass
+                now = strftime(datetime.datetime.now(), "%Y-%m-%dT%H:%M:%S")
+                r = requests.post(
+                    userdata['scheduler_url'] + '/temperature',
+                    auth=userdata['auth'],
+                    timeout=10, data={
+                        'when': now,
+                        'temp': temp,
+                    })
+                logger.info("Cached temperature update %.2f, result %d",
+                            temp, r.status_code)
+            except (requests.exceptions.RequestException, ValueError) as e:
+                logger.info("Error updating cached temperature (%s)",
+                            str(e))
 
 def scheduler_iteration(mqttc, target_temp_topic, scheduler_url, auth, now):
     """Fetch schedule, determine target and set it.
@@ -165,22 +164,6 @@ def scheduler_iteration(mqttc, target_temp_topic, scheduler_url, auth, now):
 
 def main():
     conf = config.load_config()
-    period_event = threading.Event()
-    mqttc = mqtt.Client(userdata={
-        'conf': conf,
-        'thermostat_status_topic':
-            conf.get('heating', 'thermostat_status_topic'),
-        'thermostat_schedule_change_topic':
-            conf.get('heating', 'thermostat_schedule_change_topic'),
-        'temperature_sensor_topic':
-            conf.get('heating', 'temperature_sensor_topic'),
-        'timer_event': period_event,
-        })
-    mqttc.username_pw_set(conf.get('mqtt', 'user'),
-                          conf.get('mqtt', 'password'))
-    mqttc.on_connect = mqtt_on_connect
-    mqttc.on_message = mqtt_on_message
-    mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
 
     # If the 'heating' section of the config has a 'scheduler_username' and
     # 'scheduler_password' entry, we use these with HTTP basic auth.
@@ -197,6 +180,25 @@ def main():
         scheduler_url = sys.argv[1]
     else:
         scheduler_url = conf.get('heating', 'scheduler_url')
+
+    period_event = threading.Event()
+    mqttc = mqtt.Client(userdata={
+        'conf': conf,
+        'thermostat_status_topic':
+            conf.get('heating', 'thermostat_status_topic'),
+        'thermostat_schedule_change_topic':
+            conf.get('heating', 'thermostat_schedule_change_topic'),
+        'temperature_sensor_topic':
+            conf.get('heating', 'temperature_sensor_topic'),
+        'timer_event': period_event,
+        'scheduler_url': scheduler_url,
+        'auth': auth,
+        })
+    mqttc.username_pw_set(conf.get('mqtt', 'user'),
+                          conf.get('mqtt', 'password'))
+    mqttc.on_connect = mqtt_on_connect
+    mqttc.on_message = mqtt_on_message
+    mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
 
     mqttc.loop_start()
     while True:

@@ -75,6 +75,23 @@ def remove_target_override():
     db.commit()
     return ('', 204)
 
+@app.route("/temperature", methods=["POST"])
+def update_cached_temperature():
+    """Updates the currently-cached temperature value.
+
+    Expects request values 'when' (datetime) and 'temp'"""
+    try:
+        temp = float(request.values['temp'])
+        when = datetime.datetime.strptime(
+            request.values['when'], "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return ('', 400)
+
+    db = get_db()
+    model.update_last_temperature(db, when, temp)
+    db.commit()
+    return ('', 200)
+
 @app.route("/schedule")
 def get_schedule():
     db = get_db()
