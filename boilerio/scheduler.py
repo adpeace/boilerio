@@ -83,7 +83,7 @@ class SchedulerTemperaturePolicy(object):
         """Determine temperature target at datetime now.
 
         Returns a pair of (target, index) where index is the number of the
-        entry in the day's schedule returned by get_day. Index is -1 if from a
+        entry in the day's schedule returned by get_day. Index is -2 if from a
         target override.
         """
         # First check if we are still within an override:
@@ -99,13 +99,15 @@ class SchedulerTemperaturePolicy(object):
         # than the requested time.  If we don't find one, we need the last
         # entry from the day before.
         entry = -1
+        target = None
         for sched_time, sched_target in day_schedule:
             if sched_time <= now_time:
                 target = sched_target
                 entry += 1
             else:
                 break
-
+        if target is None:
+            entry = None
         return target, entry
 
 def mqtt_on_connect(client, userdata, flags, rc):

@@ -37,3 +37,9 @@ def test_empty_day_carries_forward_last_entry():
     assert schedule.target(thursday_midday)[0] == 22
     assert schedule.target(monday_early)[0] == 22
     assert schedule.target(monday_late)[0] == 20
+
+def test_no_schedule_returns_no_target():
+    """Check no target returned if schedule and override are empty."""
+    schedule = scheduler.SchedulerTemperaturePolicy(
+        model.FullSchedule([]), None)
+    assert schedule.target(datetime(2017, 1, 1, 0, 0)) == (None, None)
