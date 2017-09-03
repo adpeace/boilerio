@@ -229,7 +229,8 @@ function renderSummary(summary) {
     var current = $("<div>").attr("id", "current");
     current.append($("<h1>").text(current_val).append("&deg;C"));
 
-    var target = $("<p>").text(summary.target.toString());
+    var target = $("<p>").text(
+        summary.target == null ? "---" : summary.target.toString());
     target.prepend(summary.target_overridden ? "Override: "
                                              : "Target: ")
           .append("&deg;C")
