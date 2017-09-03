@@ -48,7 +48,7 @@ class SchedulerTemperaturePolicy(object):
                 strptime(tgt_override['until'], '%Y-%m-%dT%H:%M'),
                 tgt_override['temp'])
         else:
-            tgt_override = None
+            tgt_override_obj = None
         return cls(schedule, tgt_override_obj)
 
     def get_day(self, day):
@@ -161,8 +161,11 @@ def scheduler_iteration(mqttc, target_temp_topic, scheduler_url, auth, now):
 
     scheduler = SchedulerTemperaturePolicy.from_json(r.text)
     target = scheduler.target(now)
-    logger.info("Publishing temperature update: %d", target[0])
-    mqttc.publish(target_temp_topic, json.dumps({'target': target[0]}))
+    if target[0] is None:
+        logger.info("No target temperature available.")
+    else:
+        logger.info("Publishing target temperature update: %d", target[0])
+        mqttc.publish(target_temp_topic, json.dumps({'target': target[0]}))
 
 def main():
     conf = config.load_config()

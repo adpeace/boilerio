@@ -1,7 +1,28 @@
+# Note that this file should probably be split into two along with
+# separation of scheduler policy from the scheduler app.
+
+from mock import Mock
 from datetime import time, datetime
 from boilerio import model, scheduler
 import requests_mock
 import requests.exceptions
+
+EMPTY_SCHEDULE_RESPONSE = """{
+   "schedule": {
+       "0": [],
+       "1": [],
+       "2": [],
+       "3": [],
+       "4": [],
+       "5": [],
+       "6": []
+   },
+   "target_override": {}
+}"""
+
+#
+# Scheduler tests
+#
 
 @requests_mock.Mocker()
 def test_no_exception_if_request_raises(m):
@@ -12,6 +33,18 @@ def test_no_exception_if_request_raises(m):
 def test_no_exception_if_request_fails(m):
     m.get("http://scheduler/api/schedule", status_code=401)
     scheduler.scheduler_iteration(None, None, 'http://scheduler/api', None, None)
+
+@requests_mock.Mocker()
+def test_copes_with_no_target(m):
+    m.get("http://scheduler/api/schedule", text=EMPTY_SCHEDULE_RESPONSE)
+    mqttc = Mock()
+    now = datetime.now()
+    scheduler.scheduler_iteration(mqttc, None, "http://scheduler/api", None, now)
+    mqttc.publish.assert_not_called()
+
+#
+# Scheduler policy tests
+#
 
 def test_empty_day_carries_forward_last_entry():
     """Carry-forward behaviour for empty days.
@@ -43,3 +76,8 @@ def test_no_schedule_returns_no_target():
     schedule = scheduler.SchedulerTemperaturePolicy(
         model.FullSchedule([]), None)
     assert schedule.target(datetime(2017, 1, 1, 0, 0)) == (None, None)
+
+def test_scheduler_from_json_empty_schedule():
+    """Check policy creation from JSON with empty schedule."""
+    schedule = scheduler.SchedulerTemperaturePolicy.from_json(
+        EMPTY_SCHEDULE_RESPONSE)
