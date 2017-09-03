@@ -1,0 +1,10 @@
+[Unit]
+Description=Danfoss boiler interface to MQTT
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/boiler_to_mqtt /dev/ttyUSB0
+User=boilermqtt
+
+[Install]
+WantedBy=multi-user.target

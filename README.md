@@ -1,11 +1,9 @@
-# Heating control
+# The BoilerIO Software Thermostat
 
-BoilerIO is a software thermostat.
-
-An installation of BoilerIO can control heating in a zone of your home.  Code
-is provided here to connect with Danfoss RF receivers though other
-implementations could easily be added, and to receive temperature updates over
-MQTT in a format described later in this README.
+BoilerIO can control heating in a zone of your home.  Code is provided here
+to connect with Danfoss RF receivers though other implementations could
+easily be added, and to receive temperature updates over MQTT in a format
+described later in this README.
 
 This has been tested with the Danfoss RF transciever code in the thermostat.git
 repository at https://github.com/adpeace/thermostat.git.
@@ -30,23 +28,40 @@ checked-out source instead of installing it).
 
 ## The scheduler
 
-The scheduler comes in three parts:
+The scheduler comes in four parts:
 
 1.  The database.  You need to be running postgres; once you have installed
 postgres you can create a database user and database for the scheduler, then
 user scheduler.sql to create the requisite tables.  (This currently assumes the
 databsae and a role exists called `scheduler`.)
 
-2.  The controller.  This is the `scheduler` Python script.  You'll need to
-have a configuration file for this to work: see below for more info.  Then,
-just ensure this daemon is running to push temperature updates to the boiler
-controller.
+2.  The controller.  This is the `scheduler` Python script.  Ensure this
+daemon is running to push target temperature updates to the boiler
+controller (the maintaintemp script) and update the cache of the current
+temperature in the backend web app.
 
 3.  The web app.  This is the `schedulerweb` Flask app.  The recommended
 configuration is for this to be proxied through nginx and run inside uwsgi.
 
+4.  The web-based UI.  This talks to the schedulerweb app and presents a UI
+where the current temperature and schedule can be configured.
+
 You'll need to the running the `maintaintemp` service also described below to
 issue commands to your boiler.
+
+Example uWSGI configuration for `schedulerweb` (assuming you have the Python
+package installed) - this can be placed in `/etc/uwsgi/apps-available` on
+Ubuntu's version of uwsgi:
+
+```
+[uwsgi]
+socket = /var/www/boilerio/thermostat.sock
+module = boilerio.schedulerweb:app
+logto = /var/log/uwsgi/boilerio/thermostat.log
+uid = boilerio
+gid = www-data
+chmod-socket = 664
+```
 
 ## boiler\_to\_mqtt
 
@@ -90,7 +105,7 @@ mosquitto clients installed and are running the `boiler_to_mqtt.py` script:
 ```
 echo -n "Learning mode - program boiler then hit enter... "
 while ! read -t 1 ; do
-    mosquitto_pub -h <host> -u <username> -P <passwd> -t heating/demand \
+    mosquitto_pub -h <host> -u <username> -P <passwd> -t heating/zone/demand \
                   -m '{"command": "L", "thermostat": 47793}'
 done
 ```
@@ -180,7 +195,7 @@ password = imnottellingyou
 # the config in case you have other software that constrains your choices, and
 # ensures they are consistent across apps.
 info_basetopic = heating/zone/info
-demand_request_topic = heating/demand
+demand_request_topic = heating/zone/demand
 temperature_sensor_topic = emon_sensors/emonth5
 target_temp_topic = heating/thermostat/target_temp
 thermostat_status_topic = heating/thermostat/status
