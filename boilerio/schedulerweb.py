@@ -54,13 +54,15 @@ def get_summary():
     today = scheduler.get_day(now.weekday())
     today = [{'time': starttime.strftime("%H:%M"), 'temp': temp}
              for (starttime, temp) in today]
+    temp = model.get_last_temperature(db)
+    cached_temp = temp.temp if temp else None
 
     db.commit()
     result = {
         'target': target[0],
         'target_entry': target[1],
         'target_overridden': target[1] == -2,
-        'current': model.get_last_temperature(db).temp,
+        'current': cached_temp,
         'server_day_of_week': now.weekday(),
         'today': today,
         'target_override': tgt_override,

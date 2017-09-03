@@ -29,6 +29,8 @@ def get_last_temperature(db):
     if len(results) == 1:
         r1 = results[0]
         return TempReading(r1[1], r1[0])
+    else:
+        return None
 
 class FullSchedule(object):
     """ The heating schedule. """
