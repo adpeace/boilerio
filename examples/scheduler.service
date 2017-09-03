@@ -1,0 +1,12 @@
+[Unit]
+Description=Heating scheduler
+After=network.target
+Wants=maintaintemp.service
+
+[Service]
+ExecStart=/usr/local/bin/scheduler
+User=boilerio
+Group=boilerio
+
+[Install]
+WantedBy=multi-user.target

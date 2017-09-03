@@ -1,0 +1,12 @@
+[Unit]
+Description=Issue boiler commands to achieve temperature target
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/maintaintemp
+User=boilerio
+Group=boilerio
+
+[Install]
+WantedBy=multi-user.target
+
