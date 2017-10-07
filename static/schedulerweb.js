@@ -236,8 +236,9 @@ function renderSummary(summary) {
           .append("&deg;C")
           .attr("id", "target");
     current.append(target);
+    var until = new Date(summary.target_override.until);
     if (summary.target_overridden)
-        target.append(" until " + summary.target_override.until);
+        target.append(" until " + until.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
     schedule_div.append(current);
 
     var page = $("<div>").addClass("page");
