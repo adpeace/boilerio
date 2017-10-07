@@ -58,7 +58,7 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
                     direction, tid, cmd = data.split()
                 except:
                     continue
-                if direction not in ['SEND', 'RECV'] or \
+                if direction not in ['ISSUE', 'RECV'] or \
                    cmd not in ['ON', 'OFF', 'LEARN']:
                     print "Couldn't parse input: {}".format(data)
                     continue
