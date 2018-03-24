@@ -78,7 +78,7 @@ class State(object):
         self.now = None
         self.lastCommand = None
         self.lastReading = None
-        self.state = None
+        self.state = MODE_STALE
 
         self.pwmDutyCycle = None
         self.pwmBoilerCycle = None
@@ -238,9 +238,9 @@ def period(state):
     if state.temperature_reading_stale():
         # Don't use stale temperature readings to make decisions:
         state.update_state(MODE_STALE)
-    elif state.state is None or state.state == MODE_STALE:
-        # If we just a reading after having had stale or no data, pick
-        # a starting state from scratch:
+    elif state.state == MODE_STALE:
+        # If we just got a reading after having had stale or no data, pick a
+        # starting state from scratch:
         if state.last_temperature() < (state.targetTemp - TARGET_ZONE_WIDTH / 2):
             state.update_state(MODE_ON)
         elif state.last_temperature() > (state.targetTemp + TARGET_ZONE_WIDTH / 2):
