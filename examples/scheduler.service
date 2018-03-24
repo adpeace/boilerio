@@ -7,6 +7,8 @@ Wants=maintaintemp.service
 ExecStart=/usr/local/bin/scheduler
 User=boilerio
 Group=boilerio
+Restart=always
+RestartSec=60
 
 [Install]
 WantedBy=multi-user.target

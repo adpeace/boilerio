@@ -5,6 +5,8 @@ After=network.target
 [Service]
 ExecStart=/usr/local/bin/boiler_to_mqtt /dev/ttyUSB0
 User=boilermqtt
+Restart=always
+RestartSec=60
 
 [Install]
 WantedBy=multi-user.target
