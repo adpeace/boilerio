@@ -60,10 +60,9 @@ class MqttBoilerControl(BoilerControl):
             'thermostat': self.thermostat_id,
             'command': cmd}))
 
-class BoilerPWM(pwm.PWM):
-    def __init__(self, state, dutycycle, pwmperiod):
+class BoilerDevice(object):
+    def __init__(self, state):
         self.state = state
-        super(BoilerPWM, self).__init__(dutycycle, pwmperiod)
 
     def on(self):
         self.state.boiler_command(BOILER_COMMAND_ON)
@@ -146,7 +145,8 @@ class State(object):
     def update_duty_cycle(self, dc):
         self.pwmDutyCycle = datetime.timedelta(0, PWM_PERIOD.total_seconds() * dc)
         if not self.pwmBoilerCycle:
-            self.pwmBoilerCycle = BoilerPWM(self, self.pwmDutyCycle, PWM_PERIOD)
+            self.pwmBoilerCycle = pwm.PWN(self, self.pwmDutyCycle, PWM_PERIOD,
+                                          BoilerDevice(self))
         else:
             self.pwmBoilerCycle.setDutyCycle(self.pwmDutyCycle)
 
@@ -201,7 +201,8 @@ def mode_pwm_enter(state):
     # Record the temperature target when we enter, so that we know whether
     # to keep state on exit (i.e. if we messed up and temperature left the
     # target zone even though the target didn't change).
-    state.pwmBoilerCycle = BoilerPWM(state, datetime.timedelta(0), PWM_PERIOD)
+    state.pwmBoilerCycle = pwm.PWM(datetime.timedelta(0), PWM_PERIOD,
+                                   BoilerDevice(state))
     state.pid.setLastValue(state.last_temperature())
 
 def mode_pwm(state):
