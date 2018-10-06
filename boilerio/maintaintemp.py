@@ -74,11 +74,19 @@ class BoilerPWM(pwm.PWM):
 # Global state:
 
 class State(object):
-    def __init__(self, boiler_control):
+    def __init__(self, boiler_control, state_change_callback):
+        """Initialise state object.
+
+        state_change_callback -- a function taking an index into the state
+                                 dictionary
+        boiler_control -- a BoilerControl-like object allowing control of the
+                          boiler.
+        """
         self.now = None
         self.lastCommand = None
         self.lastReading = None
         self.state = MODE_STALE
+        self.state_change_callback = state_change_callback
 
         self.pwmDutyCycle = None
         self.pwmBoilerCycle = None
@@ -103,6 +111,9 @@ class State(object):
             name, _, enter = state_fns[new_state]
             logger.info("Transitioning from state %s to %s", oldname, name)
             self.state = new_state
+
+            if self.state_change_callback is not None:
+                self.state_change_callback(new_state)
 
             # If it has an entry function, run it:
             if enter:
@@ -300,6 +311,15 @@ def on_message(client, userdata, msg):
     elif msg.topic == userdata['target_temp']:
         target_update()
 
+class StateCallback(object):
+    def __init__(self, mqttc, status_topic):
+        self.mqttc = mqttc
+        self.status_topic = status_topic
+
+    def callback(self, mode):
+        self.mqttc.publish(self.status_topic, json.dumps(
+            {'mode': state_fns[mode][0]}))
+
 def maintain_temp(sensor_topic, thermostat_id, dry_run):
     conf = config.load_config()
     mqttc = mqtt.Client()
@@ -308,7 +328,10 @@ def maintain_temp(sensor_topic, thermostat_id, dry_run):
             thermostat_id, mqttc, conf.get('heating', 'demand_request_topic'))
     else:
         boiler_control = None
-    state = State(boiler_control)
+
+    state_callback = StateCallback(mqttc, conf.get(
+        'heating', 'thermostat_status_topic'))
+    state = State(boiler_control, state_callback.callback)
 
     mqttc.user_data_set({
         'state': state,

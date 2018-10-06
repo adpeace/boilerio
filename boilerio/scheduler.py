@@ -122,8 +122,25 @@ def mqtt_on_message(client, userdata, msg):
     if msg.topic == userdata['thermostat_schedule_change_topic']:
         userdata['timer_event'].set()
     elif msg.topic == userdata['thermostat_status_topic']:
-        if json.loads(msg.payload)['status'] == 'online':
+        data = json.loads(msg.payload)
+        if 'status' in data and data['status'] == 'online':
             userdata['timer_event'].set()
+        if 'mode' in data:
+            try:
+                now = strftime(datetime.datetime.now(), "%Y-%m-%dT%H:%M:%S")
+                r = requests.post(
+                    userdata['scheduler_url'] + '/state',
+                    auth=userdata['auth'],
+                    timeout=10, data={
+                        'when': now,
+                        'state': data['mode'],
+                    })
+                logger.info("Cached state update %s, result %d",
+                            data['mode'], r.status_code)
+            except (requests.exceptions.RequestException, ValueError) as e:
+                logger.info("Error updating cached state (%s)",
+                            str(e))
+
     elif msg.topic == userdata['temperature_sensor_topic']:
         data = json.loads(msg.payload)
         if 'temperature' in data:

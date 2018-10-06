@@ -16,7 +16,7 @@ def boiler():
 
 @pytest.yield_fixture
 def state(boiler):
-    state = maintaintemp.State(boiler)
+    state = maintaintemp.State(boiler, None)
     yield state
 
 def test_start_off_if_above_temperature(state, boiler):
