@@ -16,12 +16,12 @@ RAD_RAMPUP_TIME = 6
 RAD_RAMPDOWN_TIME = 25
 RAD_MAX_TEMP = 60
 
-SCHEDULE = [
-    (60 * 8, 19.5),
-    (60 * 10, 15.0),
-    (60 * 18, 19.5),
-    (60 * 22, 15.0),
-    ]
+#SCHEDULE = [
+#    (60 * 8, 19.5),
+#    (60 * 10, 15.0),
+#    (60 * 18, 19.5),
+#    (60 * 22, 15.0),
+#    ]
 
 class FakeBoiler(object):
     def __init__(self, house):
@@ -86,14 +86,14 @@ def run_simulation(start_temp, target_temp, sim_duration_mins,
     now = start = datetime.datetime(2000, 1, 1, 0, 0)
     for minute in range(sim_duration_mins):
         # Compute time into day and determine if we need to change target:
-        day_minute = minute % (60 * 24)
-        new_target = target_temp
-        for (sched_minute, sched_target) in SCHEDULE:
-            if sched_minute < day_minute:
-                new_target = sched_target
-        if new_target != target_temp:
-            target_temp = new_target
-            state.update_target_temperature(target_temp)
+        #day_minute = minute % (60 * 24)
+        #new_target = target_temp
+        #for (sched_minute, sched_target) in SCHEDULE:
+        #   if sched_minute < day_minute:
+        #        new_target = sched_target
+        #if new_target != target_temp:
+        #    target_temp = new_target
+        #    state.update_target_temperature(target_temp)
 
         boiler_on = 0
         for _ in range(60):
@@ -107,9 +107,8 @@ def run_simulation(start_temp, target_temp, sim_duration_mins,
         else:
             room_temp_with_error = house.room_temp
         state.update_temperature(room_temp_with_error)
-        duty_cycle = state.pwmDutyCycle.total_seconds() \
+        duty_cycle = state.pwmDutyCycle \
                      if state.pwmDutyCycle else 0
-        duty_cycle = float(duty_cycle) / maintaintemp.PWM_PERIOD.total_seconds()
         print (now - start).total_seconds() / 60, target_temp, boiler_on, \
               duty_cycle, house.room_temp, room_temp_with_error, \
               state.pid.last_prop, state.pid.error_integral, \
