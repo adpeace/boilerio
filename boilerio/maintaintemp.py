@@ -143,7 +143,7 @@ class State(object):
                self.lastReading.when < (self.now - STALE_THRESHOLD)
 
     def update_duty_cycle(self, dc):
-        self.pwmDutyCycle = datetime.timedelta(0, PWM_PERIOD.total_seconds() * dc)
+        self.pwmDutyCycle = dc
         if not self.pwmBoilerCycle:
             self.pwmBoilerCycle = pwm.PWN(self, self.pwmDutyCycle, PWM_PERIOD,
                                           BoilerDevice(self))
@@ -201,8 +201,7 @@ def mode_pwm_enter(state):
     # Record the temperature target when we enter, so that we know whether
     # to keep state on exit (i.e. if we messed up and temperature left the
     # target zone even though the target didn't change).
-    state.pwmBoilerCycle = pwm.PWM(datetime.timedelta(0), PWM_PERIOD,
-                                   BoilerDevice(state))
+    state.pwmBoilerCycle = pwm.PWM(0, PWM_PERIOD, BoilerDevice(state))
     state.pid.setLastValue(state.last_temperature())
 
 def mode_pwm(state):
@@ -224,7 +223,7 @@ def mode_pwm(state):
         pid_output = state.pid.update(state.last_temperature())
         state.update_duty_cycle(pid_output)
 
-        logger.debug("PID ouutput: %f", pid_output)
+        logger.debug("PID output: %f", pid_output)
         logger.debug("PID internals: prop %f, int %f, diff %f",
                      state.pid.last_prop, state.pid.error_integral,
                      state.pid.last_diff)
@@ -293,8 +292,7 @@ def on_message(client, userdata, msg):
         state.update_temperature(temp)
 
         # Print information for debugging/graphing:
-        duty_cycle = state.pwmDutyCycle.total_seconds() \
-                     if state.pwmDutyCycle else 0
+        duty_cycle = state.pwmDutyCycle if state.pwmDutyCycle else 0
         print now, state.targetTemp, state.lastCommand.cmd, duty_cycle, \
               state.last_temperature(), state.pid.last_prop, \
               state.pid.error_integral, state.pid.last_diff

@@ -14,14 +14,15 @@ class PWM(object):
                    should be on (weird naming...).
         period: the duration of a full cycle (on + off)
         device: an object implementing on and off methods."""
-        self.dutycycle = dutycycle
         self.period = period
+        self.setDutyCycle(dutycycle)
         self.active = False
         self.periodBegin = None
         self.device = device
 
     def setDutyCycle(self, dutycycle):
-        self.dutycycle = dutycycle
+        self.on_period = datetime.timedelta(
+            self.period.total_seconds() * dutycycle)
 
     def update(self, now):
         # Begin new cycle?
@@ -29,14 +30,14 @@ class PWM(object):
            self.periodBegin + self.period <= now:
             logger.debug("Beginning PWM new cycle @ %s", str(now))
             self.periodBegin = now
-            if self.dutycycle > datetime.timedelta(0, 0):
+            if self.on_period > datetime.timedelta(0, 0):
                 self.device.on()
                 self.active = True
             return
 
         # End of 'on' cycle?
-        if (self.periodBegin + self.dutycycle) <= now:
-            if self.dutycycle <= self.period and self.active:
+        if (self.periodBegin + self.on_period) <= now:
+            if self.on_period <= self.period and self.active:
                 logger.debug("End of PWM duty cycle @ %s", str(now))
                 self.device.off()
                 self.active = False
