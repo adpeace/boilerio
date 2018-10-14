@@ -25,6 +25,8 @@ class PID(object):
     def update(self, pv):
         if self.setpoint is None:
             return 0
+        if self.last_pv is None:
+            self.last_pv = pv
 
         error = self.setpoint - pv
 

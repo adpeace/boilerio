@@ -15,14 +15,18 @@ class PWM(object):
         period: the duration of a full cycle (on + off)
         device: an object implementing on and off methods."""
         self.period = period
+        self.dutycycle = None
         self.setDutyCycle(dutycycle)
         self.active = False
         self.periodBegin = None
         self.device = device
 
     def setDutyCycle(self, dutycycle):
-        self.on_period = datetime.timedelta(
-            self.period.total_seconds() * dutycycle)
+        if self.dutycycle != dutycycle:
+            self.dutycycle = dutycycle
+            self.on_period = datetime.timedelta(0,
+                self.period.total_seconds() * dutycycle)
+            self.periodBegin = None
 
     def update(self, now):
         # Begin new cycle?

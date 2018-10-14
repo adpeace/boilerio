@@ -10,7 +10,7 @@ fitting.
 import argparse
 import datetime
 import random
-from boilerio import maintaintemp
+from boilerio.thermostat import Thermostat, TempReading
 
 RAD_RAMPUP_TIME = 6
 RAD_RAMPDOWN_TIME = 25
@@ -26,12 +26,6 @@ RAD_MAX_TEMP = 60
 class FakeBoiler(object):
     def __init__(self, house):
         self.house = house
-
-    def command(self, cmd):
-        if cmd == 'O':
-            self.on()
-        elif cmd == 'X':
-            self.off()
 
     def on(self):
         self.house.heating(True)
@@ -79,8 +73,8 @@ def run_simulation(start_temp, target_temp, sim_duration_mins,
                    randomness):
     house = House(start_temp)
     boiler = FakeBoiler(house)
-    state = maintaintemp.State(boiler)
-    state.update_target_temperature(target_temp)
+    thermostat = Thermostat(boiler)
+    thermostat.set_target_temperature(target_temp)
 
     # Start time doesn't really matter:
     now = start = datetime.datetime(2000, 1, 1, 0, 0)
@@ -98,21 +92,18 @@ def run_simulation(start_temp, target_temp, sim_duration_mins,
         boiler_on = 0
         for _ in range(60):
             now = now + datetime.timedelta(0, 1)
-            state.now = now
-            maintaintemp.period(state)
+            thermostat.interval_elapsed(now)
             boiler_on += 1 if house.heating_on else 0
         house.tick()
         if randomness:
             room_temp_with_error = house.room_temp - 0.05 + 0.1 * random.random()
         else:
             room_temp_with_error = house.room_temp
-        state.update_temperature(room_temp_with_error)
-        duty_cycle = state.pwmDutyCycle \
-                     if state.pwmDutyCycle else 0
+        thermostat.update_temperature(TempReading(now, room_temp_with_error))
         print (now - start).total_seconds() / 60, target_temp, boiler_on, \
-              duty_cycle, house.room_temp, room_temp_with_error, \
-              state.pid.last_prop, state.pid.error_integral, \
-              state.pid.last_diff
+              thermostat._pwm_control.dutycycle, house.room_temp, room_temp_with_error, \
+              thermostat._pid.last_prop, thermostat._pid.error_integral, \
+              thermostat._pid.last_diff
 
 def main():
     parser = argparse.ArgumentParser()
