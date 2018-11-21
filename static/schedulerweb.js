@@ -46,7 +46,7 @@ function mk_override(override_set_ev) {
         '<div class="modal-content">' +
             '<h1>Set override</h1>' +
             '<form><label>Set target:</label> ' +
-            '<input id="override_temp" type="number">&deg;C<br /> ' +
+            '<input id="override_temp" type="number" step="any">&deg;C<br /> ' +
             '<label>Duration:</label> ' +
             '<input id="override_hours" type="number" /> hours' +
             '<div class="buttons">' +
@@ -164,7 +164,7 @@ function renderSchedule(sched, dow, highlighted_entry, editable) {
         timefield.attr("id", "time_" + dow);
         timefield.keypress(keyfn);
 
-        var tempfield = $('<input type="number" placeholder="Celsius">');
+        var tempfield = $('<input type="number" step="any" placeholder="Celsius">');
         tempfield.attr("id", "temp_" + dow);
         tempfield.keypress(keyfn);
 
