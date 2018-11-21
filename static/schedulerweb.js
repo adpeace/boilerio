@@ -46,7 +46,7 @@ function mk_override(override_set_ev) {
         '<div class="modal-content">' +
             '<h1>Set override</h1>' +
             '<form><label>Set target:</label> ' +
-            '<input id="override_temp" type="number" step="any">&deg;C<br /> ' +
+            '<input id="override_temp" type="number">&deg;C<br /> ' +
             '<label>Duration:</label> ' +
             '<input id="override_hours" type="number" /> hours' +
             '<div class="buttons">' +
@@ -164,7 +164,7 @@ function renderSchedule(sched, dow, highlighted_entry, editable) {
         timefield.attr("id", "time_" + dow);
         timefield.keypress(keyfn);
 
-        var tempfield = $('<input type="number" step="any" placeholder="Celsius">');
+        var tempfield = $('<input type="number" placeholder="Celsius">');
         tempfield.attr("id", "temp_" + dow);
         tempfield.keypress(keyfn);
 
@@ -225,21 +225,47 @@ function renderSummary(summary) {
     var schedule_div = $("<div>").attr('id', 'app');
 
     // Current and target temperatures
-    var current_val = summary.current ? summary.current.toFixed(1) : "---";
-    var current = $("<div>").attr("id", "current");
-    current.append($("<h1>").text(current_val).append("&deg;C"));
+    var current_div = $('<div id="current">');
+    summary.current.sort((a,b) => (a.zone > b.zone) ? 1 : 
+                                  ((b.zone > a.zone) ? -1 : 0)); 
 
-    var target = $("<p>").text(
-        summary.target == null ? "---" : summary.target.toString());
-    target.prepend(summary.target_overridden ? "Override: "
-                                             : "Target: ")
-          .append("&deg;C")
-          .attr("id", "target");
-    current.append(target);
-    var until = new Date(summary.target_override.until);
-    if (summary.target_overridden)
-        target.append(" until " + until.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-    schedule_div.append(current);
+    for (var i = 0; i < summary.current.length; i++) {
+        var current = summary.current[i];
+
+        var current_location = summary.zones[current.zone].name;
+        var current_location_p = $("<h1>").text(current_location);
+        var current_p = $('<p>');
+        var current_val = current.temp ? current.temp.toFixed(1) : "---";
+        current_p.append(current_location_p);
+        current_p.append($('<span id="current">').text(current_val).append("&deg;C "));
+
+        current_p.append($('<span id="target">').text(summary.target == null ? "(---)" : "(" + summary.target.toString() + "").append("&deg;C)"));
+        current_div.append(current_p);
+    }
+    if (summary.target_overridden) {
+        var override_text = $("<p>").text("Override until ");
+        var until = new Date(summary.target_override.until);
+        override_text.append(until.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+        current_div.append(override_text);
+    }
+
+    /* Override */
+    if (summary.target_overridden) {
+        current_div.append(
+            $('<p align="right">').append(
+                $('<button class="highlight">').html('Cancel override')
+                             .click(clear_override)));
+    } else {
+        var override_click = function() {
+            $("#override").show();
+        };
+        current_div.append(
+            $('<p align="right">').append(
+                $('<button class="highlight">').html('Override')
+                                              .click(override_click)));
+    }
+
+    schedule_div.append(current_div);
 
     var page = $("<div>").addClass("page");
     page.append(renderSchedule(summary.today,
@@ -250,22 +276,6 @@ function renderSummary(summary) {
                 ' \'#edit_schedule\'" class="flat">Edit Schedule</button>' +
                 '</div>');
     page.append(mk_override(load_summary));
-
-    /* Override */
-    if (summary.target_overridden) {
-        schedule_div.append(
-            $("<button>").addClass("floating")
-                         .html('<i class="material-icons">clear</i>')
-                         .click(clear_override));
-    } else {
-        var override_click = function() {
-            $("#override").show();
-        };
-        schedule_div.append(
-            $("<button>").addClass("floating")
-                         .html('<i class="material-icons">mode_edit</i>')
-                         .click(override_click));
-    }
 
     schedule_div.append(page);
 

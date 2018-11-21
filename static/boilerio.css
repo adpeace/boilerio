@@ -50,7 +50,6 @@ div#current {
     box-sizing: border-box;
     background-color: #a6fce4;
     width: 100%;
-    height: 240px;
     margin-left: auto;
     margin-right: auto;
     margin-bottom: 0;
@@ -59,10 +58,23 @@ div#current {
     z-index: 1;
 }
 
+/* The current and target temperature area: */
 div#current h1 {
-    font-size: 60pt;
+    font-size: 16pt;
+    margin-top: 12pt;
+    margin-bottom: 0;
+}
+
+div#current span#current {
+    font-size: 48pt;
+    font-weight: bold;
     margin-bottom: 12px;
-    line-height: 1.2;
+}
+
+div#current span#target {
+    font-size: 24pt;
+    color: #04bc89;
+    margin-bottom: 12px;
 }
 
 div#current p {
@@ -178,6 +190,13 @@ button{
     height: 36px;
     padding-left: 16px;
     padding-right: 16px;
+}
+
+input[type="button"].highlight,
+input[type="submit"].highlight,
+button.highlight {
+    color: white;
+    background-color: #03bc89;
 }
 
 input[type="button"].flat,

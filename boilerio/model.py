@@ -32,25 +32,21 @@ def get_last_state(db):
     else:
         return None
 
-def update_last_temperature(db, when, temp):
+def update_last_temperature(db, when, temp, zone):
     """ Update cached temperature value. """
     cursor = db.cursor()
-    cursor.execute('delete from temperature_cache;')
+    cursor.execute('delete from temperature_cache where zone=%s;', (zone, ))
     cursor.execute('insert into temperature_cache '
-                   '(temperature, updated) values (%s, %s);',
-                   (temp, when))
+                   '(temperature, updated, zone) values (%s, %s, %s);',
+                   (temp, when, zone))
 
-def get_last_temperature(db):
+def get_cached_temperatures(db):
     """ Return cached temperature value. """
     cursor = db.cursor()
-    cursor.execute('select temperature, updated from temperature_cache '
-                   'limit 1;')
+    cursor.execute('select temperature, updated, zone '
+                   'from temperature_cache;')
     results = cursor.fetchall()
-    if len(results) == 1:
-        r1 = results[0]
-        return TempReading(r1[1], r1[0])
-    else:
-        return None
+    return [TempReading(r[1], r[0], r[2]) for r in results]
 
 class FullSchedule(object):
     """ The heating schedule. """
@@ -91,9 +87,28 @@ class FullSchedule(object):
 
 class TempReading(object):
     """ Convenience class representing a temperature reading. """
-    def __init__(self, when, temp):
+    def __init__(self, when, temp, zone_id):
         self.when = when
         self.temp = temp
+        self.zone_id = zone_id
+
+class Zone(object):
+    """A heating zone, with relay and temperature sensor."""
+    def __init__(self, zone_id, name, boiler_relay, sensor):
+        self.zone_id = zone_id
+        self.name = name
+        self.boiler_relay = boiler_relay
+        self.sensor = sensor
+
+    @classmethod
+    def all_from_db(cls, connection):
+        cursor = connection.cursor()
+        cursor.execute("select zone_id, name, boiler_relay, sensor from zones")
+        zones = []
+        for record in cursor:
+            zone = Zone(record[0], record[1], record[2], record[3])
+            zones.append(zone)
+        return zones
 
 class TargetOverride(object):
     """ Override the set temperature for a period of time. """

@@ -54,15 +54,28 @@ def get_summary():
     today = scheduler.get_day(now.weekday())
     today = [{'time': starttime.strftime("%H:%M"), 'temp': temp}
              for (starttime, temp) in today]
-    temp = model.get_last_temperature(db)
-    cached_temp = temp.temp if temp else None
+    temp = model.get_cached_temperatures(db)
+    cached_temp = [{'zone': t.zone_id, 'temp': t.temp} for t in temp]
+    cached_state = model.get_last_state(db)
 
+    zones = model.Zone.all_from_db(db)
+    zones = {z.zone_id: {
+                    'zone_id': z.zone_id,
+                    'name': z.name,
+                    'boiler_relay': z.boiler_relay,
+                    'sensor': z.sensor
+                }
+                for z in zones
+            }
     db.commit()
+    # XXX This should be split up by zone...
     result = {
         'target': target[0],
         'target_entry': target[1],
         'target_overridden': target[1] == -2,
+        'zones': zones,
         'current': cached_temp,
+        'current_state': cached_state,
         'server_day_of_week': now.weekday(),
         'today': today,
         'target_override': tgt_override,
@@ -77,6 +90,23 @@ def remove_target_override():
     db.commit()
     return ('', 204)
 
+@app.route("/state", methods=["POST"])
+def update_cached_state():
+    """Updates the currently-cached state value.
+
+    Expects request values 'when' (datetime) and 'state'"""
+    try:
+        state = request.values['state']
+        when = datetime.datetime.strptime(
+            request.values['when'], "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return ('', 400)
+
+    db = get_db()
+    model.update_last_state(db, when, state)
+    db.commit()
+    return ('', 200)
+
 @app.route("/temperature", methods=["POST"])
 def update_cached_temperature():
     """Updates the currently-cached temperature value.
@@ -86,11 +116,12 @@ def update_cached_temperature():
         temp = float(request.values['temp'])
         when = datetime.datetime.strptime(
             request.values['when'], "%Y-%m-%dT%H:%M:%S")
+        zone = int(request.values['zone'])
     except ValueError:
         return ('', 400)
 
     db = get_db()
-    model.update_last_temperature(db, when, temp)
+    model.update_last_temperature(db, when, temp, zone)
     db.commit()
     return ('', 200)
 
@@ -148,6 +179,19 @@ def remove_schedule_entry():
     model.FullSchedule.delete_entry(db, day, time)
     db.commit()
     return ''
+
+@app.route("/zones")
+def list_zones():
+    db = get_db()
+    zones = model.Zone.all_from_db(db)
+    return jsonify({z.zone_id: {
+                'zone_id': z.zone_id,
+                'name': z.name,
+                'boiler_relay': z.boiler_relay,
+                'sensor': z.sensor
+            }
+            for z in zones
+        })
 
 @app.route("/target_override", methods=["POST"])
 def set_target_override():
