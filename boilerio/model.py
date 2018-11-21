@@ -12,6 +12,26 @@ def db_connect(host, db, user, pw):
     conn = psycopg2.connect(connect_string)
     return conn
 
+def update_last_state(db, when, state):
+    """ Update cached state value. """
+    cursor = db.cursor()
+    cursor.execute('delete from state_cache;')
+    cursor.execute('insert into state_cache '
+                   '(state, updated) values (%s, %s);',
+                   (state, when))
+
+def get_last_state(db):
+    """ Return cached temperature value. """
+    cursor = db.cursor()
+    cursor.execute('select state, updated from state_cache '
+                   'limit 1;')
+    results = cursor.fetchall()
+    if len(results) == 1:
+        r1 = results[0]
+        return r1[0]
+    else:
+        return None
+
 def update_last_temperature(db, when, temp):
     """ Update cached temperature value. """
     cursor = db.cursor()
