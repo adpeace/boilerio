@@ -1,17 +1,20 @@
-#!/usr/bin/python
+#!/usr/bin/python -u
 
 import argparse
 import serial
 import sys
 import paho.mqtt.client as mqtt
 import json
+import logging
 from boilerio import config
+
+logging.basicConfig(level=logging.DEBUG)
 
 def on_connect(client, userdata, flags, rc):
     if rc:
-        print "Error connecting, rc %d" % rc
+        logging.error("Error connecting, rc %d", rc)
         return
-    print "Subscribing to %s" % userdata['demand_topic']
+    logging.info("Subscribing to %s", userdata['demand_topic'])
     client.subscribe(userdata['demand_topic'])
 
 def on_message(client, userdata, msg):
@@ -24,16 +27,17 @@ def on_message(client, userdata, msg):
     try:
         request = json.loads(msg.payload)
     except:
-        print "Error parsing request"
+        logging.error("Error parsing request")
         return
 
     if 'command' not in request or \
        request['command'] not in ['O', 'X', 'L']:
-        print "Invalid or no command specified"
+        logging.error("Invalid or no command specified")
     if 'thermostat' not in request:
-        print "Invalid or no thermostat ID specified"
+        logging.error("Invalid or no thermostat ID specified")
     userdata['sensor_file'].write("{}{}\n".format(
         request['command'], hex(request['thermostat'])))
+    logging.debug("Published command %s to zone %s", request['command'], request['thermostat'])
 
 def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
          sensor_filename):
@@ -60,11 +64,11 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
                     continue
                 if direction not in ['ISSUE', 'RECV'] or \
                    cmd not in ['ON', 'OFF', 'LEARN']:
-                    print "Couldn't parse input: {}".format(data)
+                    logging.error("Couldn't parse input: {}".format(data))
                     continue
-                print "Publishing to {}/{} : {}".format(
+                logging.info("Publishing to {}/{} : {}".format(
                     zone_basetopic, tid, json.dumps({'direction': direction,
-                                                     'cmd': cmd}))
+                                                     'cmd': cmd})))
                 client.publish("{}/{}".format(zone_basetopic, tid),
                                json.dumps({'thermostat': tid,
                                            'direction': direction,
