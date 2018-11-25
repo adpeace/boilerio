@@ -51,23 +51,32 @@ def get_cached_temperatures(db):
 class FullSchedule(object):
     """ The heating schedule. """
     def __init__(self, entries):
+        """Initialise a schedule representation.
+
+        entries is a list of entries, of the form:
+            [ (day of week, start time, zone, temperature target) ]
+
+        day of week is zero-based (0 means Monday).  start time is a Python
+        time object; zone is a zone ID referencing a valid zone.
+        Temperature target is a temperature target in celcius.
+        """
         self.entries = entries
 
     def __iter__(self):
         return self.entries.__iter__()
 
     @classmethod
-    def create_entry(cls, db, dow, time, temp):
+    def create_entry(cls, db, dow, time, zone, temp):
         """ Create a schedule entry in the database.
 
         dow is the day of week, counting from 0 being Monday. """
         cursor = db.cursor()
-        cursor.execute("insert into schedule (day, starttime, temp) "
-                       "values (%s, %s, %s)", (dow, time, temp))
+        cursor.execute("insert into schedule (day, starttime, zone, temp) "
+                       "values (%s, %s, %s, %s)", (dow, time, zone, temp))
 
     @classmethod
     def delete_entry(cls, db, dow, time):
-        """ Remove an entry form the databse.
+        """ Remove entries for all zones at a specified day/time.
 
         dow is the day of week, counting from 0 being Monday. """
         cursor = db.cursor()
@@ -78,8 +87,8 @@ class FullSchedule(object):
     def from_db(cls, db):
         """ Create a schedule class instance from the database. """
         cursor = db.cursor()
-        cursor.execute("select day, starttime, temp from schedule "
-                       "order by day, starttime")
+        cursor.execute("select day, starttime, zone, temp from schedule "
+                       "order by day, starttime, zone")
         entries = []
         for record in cursor:
             entries.append(record)
@@ -112,19 +121,18 @@ class Zone(object):
 
 class TargetOverride(object):
     """ Override the set temperature for a period of time. """
-    def __init__(self, end, temp):
+    def __init__(self, end, temp, zone):
         self.end = end
         self.temp = temp
+        self.zone = zone
 
     @classmethod
     def from_db(cls, connection):
         cursor = connection.cursor()
-        cursor.execute('select until, temp from override limit 1')
-        data = cursor.fetchone()
-        if not data:
-            return None
-        until, temp = data
-        return cls(until, temp)
+        cursor.execute('select until, temp, zone from override')
+        data = cursor.fetchall()
+        return [cls(override[0], override[1], override[2])
+                for override in data]
 
     @classmethod
     def clear_from_db(cls, connection):
@@ -132,11 +140,19 @@ class TargetOverride(object):
         cursor = connection.cursor()
         cursor.execute('delete from override')
 
+    def to_dict(self):
+        """Convert to a dictionary (for saving as JSON)."""
+        return {
+            'until': self.end.strftime("%Y-%m-%dT%H:%M"),
+            'temp': self.temp,
+            'zone': self.zone,
+            }
+
     def save(self, connection):
         """ Replaces the current override in the database with this. """
         cursor = connection.cursor()
-        cursor.execute('delete from override')
-        cursor.execute('insert into override (until, temp) '
-                       'values (%s, %s)',
-                       (self.end, self.temp))
+        cursor.execute('delete from override where zone=%s', (self.zone, ))
+        cursor.execute('insert into override (until, temp, zone) '
+                       'values (%s, %s, %s)',
+                       (self.end, self.temp, self.zone))
 

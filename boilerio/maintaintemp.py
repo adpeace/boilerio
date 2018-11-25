@@ -31,7 +31,7 @@ class MqttBoiler(object):
         now = datetime.datetime.now()
         if cmd != self.last_cmd or \
            self.last_cmd_time < now - self.REISSUE_TIMEOUT:
-            logger.debug("Issuing boiler command %s", cmd)
+            logger.debug("Issuing boiler command %s for relay %s", cmd, self.thermostat_id)
             self.mqttc.publish(self.zone_demand_topic, json.dumps({
                 'thermostat': self.thermostat_id,
                 'command': cmd}))
@@ -75,6 +75,7 @@ def on_message(client, userdata, msg):
         # Payload should be dictionary with key 'target':
         try:
             target = float(json.loads(msg.payload)['target'])
+            logger.debug("Updated target recieved: %f", target)
             thermostat.set_target_temperature(target)
         except (KeyError, ValueError):
             pass
@@ -93,7 +94,7 @@ class StateCallback(object):
         self.mqttc.publish(self.status_topic, json.dumps(
             {'mode': mode}))
 
-def maintain_temp(sensor_topic, thermostat_id, dry_run):
+def maintain_temp(sensor_topic, target_topic, thermostat_id, dry_run):
     conf = config.load_config()
     mqttc = mqtt.Client()
     boiler_control = MqttBoiler(
@@ -105,7 +106,7 @@ def maintain_temp(sensor_topic, thermostat_id, dry_run):
     mqttc.user_data_set({
         'thermostat': thermostat,
         'tempsensor': sensor_topic,
-        'target_temp': conf.get('heating', 'target_temp_topic'),
+        'target_temp': target_topic,
         'thermostat_status_topic': conf.get('heating',
                                             'thermostat_status_topic'),
         'thermostat_id': thermostat_id,
@@ -129,10 +130,11 @@ def main():
     parser = argparse.ArgumentParser(description="Maintain target temperature")
     parser.add_argument("-n", action="store_true", dest="dry_run")
     parser.add_argument("sensor_topic")
+    parser.add_argument("target_topic")
     parser.add_argument("thermostat_id")
     args = parser.parse_args()
 
-    maintain_temp(args.sensor_topic, int(args.thermostat_id, 0), args.dry_run)
+    maintain_temp(args.sensor_topic, args.target_topic, int(args.thermostat_id, 0), args.dry_run)
 
 if __name__ == "__main__":
     main()

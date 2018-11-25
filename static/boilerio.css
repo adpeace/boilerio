@@ -65,16 +65,22 @@ div#current h1 {
     margin-bottom: 0;
 }
 
-div#current span#current {
+div#current span.current {
     font-size: 48pt;
     font-weight: bold;
     margin-bottom: 12px;
 }
 
-div#current span#target {
+div#current span.target {
     font-size: 24pt;
-    color: #04bc89;
     margin-bottom: 12px;
+    color: #04bc89;
+}
+
+div#current span.overridden {
+    font-size: 24pt;
+    margin-bottom: 12px;
+    color: black;
 }
 
 div#current p {

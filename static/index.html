@@ -30,8 +30,14 @@ load_summary = function() {
 
 load_schedule = function() {
     window.scrollTo(0, 0);
-    $.ajax({url: "api/schedule", type: "GET",
-            dataType: "json"}).done(renderFullSchedule);
+    var sched_ajax = $.ajax({url: "api/schedule", type: "GET", dataType: "json"});
+    var zones_ajax = $.ajax({url: "api/zones", type: "GET", dataType: "json"});
+    $.when(sched_ajax, zones_ajax).done(function(sched, zones) {
+        /* Get a zone ID -> name map: */
+        var zone_map = []
+        zones[0].forEach(zone => zone_map[zone.zone_id] = zone);
+        renderFullSchedule(sched[0], zone_map);
+    });
 }
 
 ready = function() {

@@ -29,15 +29,41 @@ def close_db(error):
     if hasattr(g, 'db'):
         g.db.close()
 
+# XXX get rid of this...
 def get_tgt_override_json(db):
-    target_override_obj = model.TargetOverride.from_db(db)
-    if target_override_obj:
-        return {
-            'until': target_override_obj.end.strftime("%Y-%m-%dT%H:%M"),
-            'temp': target_override_obj.temp
-            }
-    else:
-        return {}
+    return [t.to_dict() for t in model.TargetOverride.from_db(db)]
+
+def today_by_time_from_zones(today_by_zone):
+    """Pivot a zone -> schedule dictionary to a list of (time, zone, temp).
+
+    Returns a list of the form:
+        [ (starttime, zones: [ {zone: zone, temp: temp} ]) ]
+    given a dictionary of;
+        { zone: [ (starttime, zone, temp) ] }
+    """
+    today_by_time = []
+    # Nasty O(n^2), hwoever n and m are small (<5 and <10 respectively) so
+    # going for something more readable here.
+    for zone in today_by_zone:
+        for tbz_entry in today_by_zone[zone]:
+            tbz_when, tbz_zone, tbz_temp = tbz_entry 
+            inserted = False
+            index = 0
+            for tbt_entry in today_by_time:
+                if tbt_entry['when'] == tbz_when:
+                    tbt_entry['zones'].append({'zone': zone, 'temp': tbz_temp})
+                    inserted = True
+                    break
+                if tbt_entry['when'] < tbz_when:
+                    index += 1
+            if not inserted:
+                today_by_time.insert(index, {
+                    'when': tbz_when,
+                    'zones': [{'zone': zone, 'temp': tbz_temp}],
+                    })
+    # Map times to strings in returned value:
+    return [{'when': entry['when'].strftime('%H:%M'), 'zones': entry['zones']}
+            for entry in today_by_time]
 
 @app.route("/summary")
 def get_summary():
@@ -45,40 +71,48 @@ def get_summary():
     db = get_db()
 
     schedule = model.FullSchedule.from_db(db)
-    tgt_override = get_tgt_override_json(db)
-    tgt_override_obj = model.TargetOverride.from_db(db)
-    scheduler = SchedulerTemperaturePolicy(
-        schedule, tgt_override_obj)
-    target = scheduler.target(now)
 
-    today = scheduler.get_day(now.weekday())
-    today = [{'time': starttime.strftime("%H:%M"), 'temp': temp}
-             for (starttime, temp) in today]
-    temp = model.get_cached_temperatures(db)
-    cached_temp = [{'zone': t.zone_id, 'temp': t.temp} for t in temp]
-    cached_state = model.get_last_state(db)
 
     zones = model.Zone.all_from_db(db)
-    zones = {z.zone_id: {
-                    'zone_id': z.zone_id,
-                    'name': z.name,
-                    'boiler_relay': z.boiler_relay,
-                    'sensor': z.sensor
-                }
-                for z in zones
-            }
+    zones_summary = sorted([{'zone_id': z.zone_id, 'name': z.name} 
+                            for z in zones],
+                           cmp=lambda x, y: cmp(x['zone_id'], y['zone_id']))
+    target_overrides = model.TargetOverride.from_db(db)
+    current_temps = model.get_cached_temperatures(db)
+
+    scheduler = SchedulerTemperaturePolicy(
+        schedule, target_overrides)
+
+    for zone in zones_summary:
+        zid = zone['zone_id']
+
+        zone['target'] = scheduler.target(now, zid)
+        
+        # We may have a stale override so check that the target is actually
+        # being overriden:
+        if scheduler.target_overridden(now, zid):
+            zone_override = [zo for zo in target_overrides if zo.zone == zid]
+            if len(zone_override) == 1:
+                zone['target_override'] = zone_override[0].to_dict()
+            else:
+                zone['target_override'] = None
+        else:
+            zone['target_override'] = None
+
+        zone_temp = [zt for zt in current_temps if zt.zone_id == zid]
+        if len(zone_temp) == 1:
+            zone['current_temp'] = zone_temp[0].temp
+        else:
+            zone['current_temp'] = None
+
+    today_by_zone = {z.zone_id: scheduler.get_day(now.weekday(), z.zone_id)
+                     for z in zones}
+        
     db.commit()
-    # XXX This should be split up by zone...
     result = {
-        'target': target[0],
-        'target_entry': target[1],
-        'target_overridden': target[1] == -2,
-        'zones': zones,
-        'current': cached_temp,
-        'current_state': cached_state,
+        'zones': zones_summary,
         'server_day_of_week': now.weekday(),
-        'today': today,
-        'target_override': tgt_override,
+        'today': today_by_time_from_zones(today_by_zone),
         }
     return jsonify(result)
 
@@ -125,20 +159,43 @@ def update_cached_temperature():
     db.commit()
     return ('', 200)
 
+def full_schedule_to_dict(full_schedule):
+    """Generate a dictionary from a schedule object for conversion to JSON.
+
+    Generate a dictionary like:
+        { dow: [ {'when': start, 'temp':  {zone: temp}} ] }
+    """
+    json_schedule = {}
+    for dow in range(7):
+        json_schedule[dow] = []
+
+    for entry in full_schedule:
+        # Entries are ordered by dow, start, zone:
+        entry_dow, entry_start, entry_zone, entry_temp = entry
+        dow = json_schedule[entry_dow]
+        entry_start_str = entry_start.strftime("%H:%M")
+        added = False
+        for e in dow:
+            if e['when'] == entry_start_str:
+                e['zones'].append({
+                    'zone': [entry_zone],
+                    'temp': entry_temp
+                    })
+                added = True
+                break
+        if not added:
+            dow.append({
+                'when': entry_start.strftime('%H:%M'),
+                'zones': [{'zone': entry_zone, 'temp': entry_temp}],
+                })
+
+    return json_schedule
+
 @app.route("/schedule")
 def get_schedule():
     db = get_db()
     full_schedule = model.FullSchedule.from_db(db)
-    json_schedule = {}
-    for dow in range(7):
-        json_schedule[dow] = []
-    for entry in full_schedule:
-        entry_dow, entry_start, entry_temp = entry
-        dow = json_schedule[entry_dow]
-        dow.append({
-            'time': entry_start.strftime('%H:%M'),
-            'temp': entry_temp
-            })
+    json_schedule = full_schedule_to_dict(full_schedule)
     tgt_override = get_tgt_override_json(db)
     db.commit()
     return jsonify({
@@ -149,8 +206,8 @@ def get_schedule():
 @app.route("/schedule/new_entry", methods=["POST"])
 def add_schedule_entry():
     db = get_db()
+    zones = model.Zone.all_from_db(db)
     try:
-        print request.values
         time = datetime.datetime.strptime(request.values['time'], "%H:%M")
         time = time.time()
         day = int(request.values['day'])
@@ -159,9 +216,12 @@ def add_schedule_entry():
         temp = float(request.values['temp'])
         if not (temp >= 0 and temp < 35):
             raise ValueError("Target tempt must be in range 0 to 35")
+        zone = int(request.values['zone'])
+        if not any(z.zone_id == zone for z in zones):
+            raise ValueError("Unknown zone %d" % zone)
     except ValueError:
         return ('', 400)
-    model.FullSchedule.create_entry(db, day, time, temp)
+    model.FullSchedule.create_entry(db, day, time, zone, temp)
     db.commit()
     return ''
 
@@ -184,25 +244,26 @@ def remove_schedule_entry():
 def list_zones():
     db = get_db()
     zones = model.Zone.all_from_db(db)
-    return jsonify({z.zone_id: {
+    return jsonify([{
                 'zone_id': z.zone_id,
                 'name': z.name,
                 'boiler_relay': z.boiler_relay,
                 'sensor': z.sensor
-            }
-            for z in zones
-        })
+            } for z in zones
+        ])
 
 @app.route("/target_override", methods=["POST"])
 def set_target_override():
     """Set a target override for a duration specified.
 
-    Specify 'temp' and at least one of 'days', 'hours', or 'mins'.
+    Specify 'zone', 'temp' and at least one of 'days', 'hours', or 'mins'.
     Returns a JSON object containg 'temp' (the newly-accepted target)
     and 'until' which is a %H:%M-formatted time at which the override
     ends (so the client doesn't have to do a time calculation for this).
     """
     try:
+        zone = int(request.form['zone'])
+
         secs = 0
         if 'days' in request.form:
             secs += int(request.form['days']) * 60 * 60 * 24
@@ -211,7 +272,7 @@ def set_target_override():
         if 'mins' in request.form:
             secs += int(request.form['mins']) * 60
         if not secs:
-            return # XXX exception
+            return 'Must specify days, hours, or mins', 400
 
         duration = datetime.timedelta(0, secs)
         temp = float(request.form['temp'])
@@ -221,7 +282,7 @@ def set_target_override():
     end = now + duration
 
     db = get_db()
-    override = model.TargetOverride(end, temp)
+    override = model.TargetOverride(end, temp, zone)
     override.save(db)
     db.commit()
 
