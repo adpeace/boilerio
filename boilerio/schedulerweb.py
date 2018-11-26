@@ -48,19 +48,17 @@ def today_by_time_from_zones(today_by_zone):
         for tbz_entry in today_by_zone[zone]:
             tbz_when, tbz_zone, tbz_temp = tbz_entry 
             inserted = False
-            index = 0
             for tbt_entry in today_by_time:
                 if tbt_entry['when'] == tbz_when:
                     tbt_entry['zones'].append({'zone': zone, 'temp': tbz_temp})
                     inserted = True
                     break
-                if tbt_entry['when'] < tbz_when:
-                    index += 1
             if not inserted:
-                today_by_time.insert(index, {
+                today_by_time.append({
                     'when': tbz_when,
                     'zones': [{'zone': zone, 'temp': tbz_temp}],
                     })
+    today_by_time.sort(cmp=lambda x,y: cmp(x['when'], y['when']))
     # Map times to strings in returned value:
     return [{'when': entry['when'].strftime('%H:%M'), 'zones': entry['zones']}
             for entry in today_by_time]
@@ -71,7 +69,6 @@ def get_summary():
     db = get_db()
 
     schedule = model.FullSchedule.from_db(db)
-
 
     zones = model.Zone.all_from_db(db)
     zones_summary = sorted([{'zone_id': z.zone_id, 'name': z.name} 
@@ -178,7 +175,7 @@ def full_schedule_to_dict(full_schedule):
         for e in dow:
             if e['when'] == entry_start_str:
                 e['zones'].append({
-                    'zone': [entry_zone],
+                    'zone': entry_zone,
                     'temp': entry_temp
                     })
                 added = True

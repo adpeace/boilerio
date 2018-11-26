@@ -121,6 +121,33 @@ def test_zones_dont_interfere():
     assert schedule.target(monday, 1) == 20
     assert schedule.target(monday, 2) == 22
 
+def test_zones_changing_simultaneously():
+    schedule_json_changing_simultaneously = """{
+        "schedule": { "0": [{
+                        "when": "10:00", 
+                        "zones": [{ "temp": 19, "zone": 1 }]
+                        }, {
+                        "when": "11:00",
+                        "zones": [{"temp": 20, "zone": 2 }]
+                        }, {
+                        "when": "12:00",
+                        "zones": [{"temp": 15, "zone": 1 },
+                                  {"temp": 16, "zone": 2 }]
+                        }],
+                      "1": [], "2": [], "3": [], "4": [], "5": [], "6": [] },
+        "target_override": []
+    }"""
+    schedule = scheduler.SchedulerTemperaturePolicy.from_json(
+        schedule_json_changing_simultaneously)
+
+    # Monday at 10:30 should be 19 in zone 1
+    assert schedule.target(datetime(2018, 12, 3, 10, 30), 1) == 19
+    # Monday at 12:30 should be 20 in zone 2
+    assert schedule.target(datetime(2018, 12, 3, 11, 30), 2) == 20
+    # Monday at 13:30 should be 15 and 16 respectively in zones 1 and 2
+    assert schedule.target(datetime(2018, 12, 3, 12, 30), 1) == 15
+    assert schedule.target(datetime(2018, 12, 3, 12, 30), 2) == 16
+
 def test_no_schedule_returns_no_target():
     """Check no target returned if schedule and override are empty."""
     schedule = scheduler.SchedulerTemperaturePolicy(

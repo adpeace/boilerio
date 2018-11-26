@@ -37,3 +37,15 @@ def test_get_schedule_simple():
         }
     fullsched = model.FullSchedule(entries)
     assert schedulerweb.full_schedule_to_dict(fullsched) == expected_result
+
+def test_get_schedule_simultaneous_change():
+    entries = [
+        (0, time(10,0), 1, 10),
+        (0, time(10,0), 2, 10),
+        ]
+    expected_result = {
+        0: [{'when': "10:00", 'zones': [{'zone': 1, 'temp': 10}, {'zone': 2, 'temp': 10}]}],
+        1: [], 2: [], 3: [], 4: [], 5: [], 6: [],
+        }
+    fullsched = model.FullSchedule(entries)
+    assert schedulerweb.full_schedule_to_dict(fullsched) == expected_result
