@@ -34,9 +34,11 @@ class PWM(object):
            self.periodBegin + self.period <= now:
             logger.debug("Beginning PWM new cycle @ %s", str(now))
             self.periodBegin = now
-            if self.on_period > datetime.timedelta(0, 0):
+            self.active = self.on_period > datetime.timedelta(0, 0)
+            if self.active:
                 self.device.on()
-                self.active = True
+            else:
+                self.device.off()
             return
 
         # End of 'on' cycle?
