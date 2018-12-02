@@ -36,7 +36,7 @@ def on_message(client, userdata, msg):
     if 'thermostat' not in request:
         logging.error("Invalid or no thermostat ID specified")
     userdata['sensor_file'].write("{}{}\n".format(
-        request['command'], hex(request['thermostat'])))
+        request['command'], hex(int(request['thermostat'], 0))))
     logging.debug("Published command %s to zone %s", request['command'], request['thermostat'])
 
 def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,

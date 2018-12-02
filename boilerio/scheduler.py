@@ -3,6 +3,7 @@
 """Operate heating schedule."""
 
 import sys
+import os
 import json
 import datetime
 import threading
@@ -14,6 +15,7 @@ from requests.auth import HTTPBasicAuth
 
 import model
 import config
+import thermostat
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -21,6 +23,35 @@ logger.setLevel(logging.DEBUG)
 
 strptime = datetime.datetime.strptime
 strftime = datetime.datetime.strftime
+
+class MqttBoiler(object):
+    """Control boiler using MQTT commands."""
+    # Time after which we might re-issue the same command to the boiler
+    REISSUE_TIMEOUT = datetime.timedelta(0, 120)
+
+    def __init__(self, thermostat_id, mqttc, zone_demand_topic):
+        self.mqttc = mqttc
+        self.zone_demand_topic = zone_demand_topic
+        self.last_cmd = None
+        self.last_cmd_time = None
+        self.thermostat_id = thermostat_id
+
+    def _command(self, cmd):
+        now = datetime.datetime.now()
+        if cmd != self.last_cmd or \
+           self.last_cmd_time < now - self.REISSUE_TIMEOUT:
+            logger.debug("Issuing boiler command %s for relay %s", cmd, self.thermostat_id)
+            self.mqttc.publish(self.zone_demand_topic, json.dumps({
+                'thermostat': self.thermostat_id,
+                'command': cmd}))
+            self.last_cmd = cmd
+            self.last_cmd_time = now
+
+    def on(self):
+        self._command('O')
+
+    def off(self):
+        self._command('X')
 
 class ZoneInfoUnavailable(Exception):
     pass
@@ -131,88 +162,63 @@ def mqtt_on_connect(client, userdata, flags, rc):
     for zone in userdata['zones']:
         client.subscribe(zone.sensor)
     client.subscribe(userdata['thermostat_schedule_change_topic'])
-    client.subscribe(userdata['thermostat_status_topic'])
 
 def mqtt_on_message(client, userdata, msg):
     if msg.topic == userdata['thermostat_schedule_change_topic']:
         userdata['timer_event'].set()
-    elif msg.topic == userdata['thermostat_status_topic']:
-        data = json.loads(msg.payload)
-        if 'status' in data and data['status'] == 'online':
-            userdata['timer_event'].set()
-        if 'mode' in data:
-            try:
-                now = strftime(datetime.datetime.now(), "%Y-%m-%dT%H:%M:%S")
-                r = requests.post(
-                    userdata['scheduler_url'] + '/state',
-                    auth=userdata['auth'],
-                    timeout=10, data={
-                        'when': now,
-                        'state': data['mode'],
-                    })
-                logger.info("Cached state update %s, result %d",
-                            data['mode'], r.status_code)
-            except (requests.exceptions.RequestException, ValueError) as e:
-                logger.info("Error updating cached state (%s)",
-                            str(e))
 
-def temperature_message(client, userdata, msg):
-    data = json.loads(msg.payload)
-    if 'temperature' in data:
-        # Determine which zone the reading is for:
-        sensor_zone = None
-        for zone in userdata['zones']:
-            if zone.sensor == msg.topic:
-                sensor_zone = zone.zone_id
-                break
-        if sensor_zone is None:
-            logger.debug("Received reading for sensor in an unknown zone (%s): ignoring.",
-                         msg.topic)
+class ZoneController(object):
+    """Connect a schedule, thermostat, and temperature sensor."""
+
+    def __init__(self, mqttc, zone, boiler, thermostat, scheduler_url,
+                 auth):
+        self.zone = zone
+        self.boiler = boiler
+        self.thermostat = thermostat
+        self.scheduler_url = scheduler_url
+        self.scheduler_auth = auth
+
+        mqttc.message_callback_add(zone.sensor, self.temp_callback)
+
+    def temp_callback(self, client, userdata, msg):
+        if self.zone.sensor!= msg.topic:
             return
+        # This should probably be in its own class: update the cached
+        # temperature value on the server:
         try:
+            data = json.loads(msg.payload)
             temp = float(data['temperature'])
-            now = strftime(datetime.datetime.now(), "%Y-%m-%dT%H:%M:%S")
+
+            now = datetime.datetime.now()
+            temp_reading = thermostat.TempReading(now, temp)
             r = requests.post(
-                userdata['scheduler_url'] + '/temperature',
-                auth=userdata['auth'],
+                self.scheduler_url + '/temperature',
+                auth=self.scheduler_auth,
                 timeout=10, data={
-                    'when': now,
+                    'when': strftime(now, "%Y-%m-%dT%H:%M:%S"),
                     'temp': temp,
-                    'zone': sensor_zone
+                    'zone': self.zone.zone_id
                 })
             logger.info("Cached temperature update for zone %d: %.2f, result %d",
-                        sensor_zone, temp, r.status_code)
+                        self.zone.zone_id, temp, r.status_code)
         except (requests.exceptions.RequestException, ValueError) as e:
             logger.info("Error updating cached temperature (%s)",
                         str(e))
 
-def scheduler_iteration(mqttc, target_temp_topic, scheduler_url, auth, now, zones):
-    """Fetch schedule, determine target and set it.
+        # Update the thermostat:
+        self.thermostat.update_temperature(temp_reading)
 
-    Has no return value and swallows any exceptions fetching the schedule,
-    etc., with the intention that a daemon can use this function in a simple
-    loop and the correct behaviour will result."""
-    try:
-        r = requests.get(scheduler_url + "/schedule", auth=auth, timeout=10)
-    except requests.exceptions.RequestException as e:
-        logger.error("Failed interval (%s)", str(e))
-        return
+    def iteration(self, scheduler, now):
+        """Update the zone.  Should be called once per second."""
+        # Update target temperature by polling scheduler
+        target = scheduler.target(now, self.zone.zone_id)
+        if self.thermostat.target != target:
+            logger.info("Updating target temperature (%s -> %s) for zone %d",
+                        str(self.thermostat.target), str(target), self.zone.zone_id)
+            self.thermostat.set_target_temperature(target)
 
-    if r.status_code != 200:
-        logger.error("Couldn't get schedule (%d)", r.status_code)
-        return
-
-    scheduler = SchedulerTemperaturePolicy.from_json(r.text)
-    for zone in zones:
-        target = scheduler.target(now, zone.zone_id)
-        if target is None:
-            logger.info("No target temperature available for zone %s.",
-                        str(zone.zone_id))
-        else:
-            logger.info("Publishing target temperature update <%f> to <%s>",
-                target, zone.boiler_relay)
-            mqttc.publish(zone.boiler_relay,
-                          json.dumps({'target': target}))
+        # Update thermostat:
+        self.thermostat.interval_elapsed(now)
 
 def load_zone_info(scheduler_url, auth):
     """Load zone information from service.
@@ -222,14 +228,71 @@ def load_zone_info(scheduler_url, auth):
     the HTTP request fails and it is present, otherwise fail (since we don't
     know what zones are present).
     """
-    # XXX doesn't do the caching yet :-)
+    BOILERIO_ZONE_BACKUP_FILE = '/var/lib/boilerio/zones'
+
+    zones = None
+
+    # First try to get from web service:
     r = requests.get(scheduler_url + '/zones', auth=auth)
     if r.status_code == 200:
+        try:
+            with open(BOILERIO_ZONE_BACKUP_FILE, 'w') as f:
+                f.write(r.text)
+        except:
+            logger.warn("Unable to write backup zone file.")
         zones = json.loads(r.text)
-        zones = [model.Zone(z['zone_id'], z['name'], z['boiler_relay'], z['sensor'])
-                 for z in zones]
-        return zones
+    else:
+        # That failed, try to get from last backup:
+        logger.error("Couldn't retrieve zone information from web servive.")
+        if os.path.exists(BOILERIO_ZONE_BACKUP_FILE):
+            try:
+                with open(BOILERIO_ZONE_BACKUP_FILE, 'r') as f:
+                    zones = json.loads(f.read())
+            except:
+                logger.error("Couldn't retrive zones from backup.")
+
+    if zones is not None:
+        return [model.Zone(z['zone_id'], z['name'], z['boiler_relay'], z['sensor'])
+                for z in zones]
     raise ZoneInfoUnavailable()
+
+class AllZoneController(object):
+    """Controller for multiple zones.
+
+    Interfaces between the web API and a set of local zone controllers."""
+
+    SCHEDULER_UPDATE_INTERVAL = datetime.timedelta(seconds=60)
+
+    def __init__(self, scheduler_url, auth, zone_controllers):
+        self.scheduler = None
+        self.last_scheduler_update = None
+
+        self.scheduler_url = scheduler_url
+        self.auth = auth
+        self.zone_controllers = zone_controllers
+
+    def iteration(self, now):
+        # Update schedule:
+        if self.last_scheduler_update:
+            next_scheduler_update = self.last_scheduler_update + self.SCHEDULER_UPDATE_INTERVAL
+        if self.scheduler is None or next_scheduler_update < now:
+            try:
+                r = requests.get(self.scheduler_url + "/schedule",
+                                 auth=self.auth, timeout=10)
+            except requests.exceptions.RequestException as e:
+                logger.error("Failed interval (%s)", str(e))
+            else:
+                if r.status_code != 200:
+                    logger.error("Couldn't get schedule (%d)",
+                                 r.status_code)
+                else:
+                    self.last_scheduler_update = now
+                    self.scheduler = SchedulerTemperaturePolicy.from_json(r.text)
+
+        # Update thermostats:
+        if self.scheduler:
+            for controller in self.zone_controllers:
+                controller.iteration(self.scheduler, now)
 
 def main():
     conf = config.load_config()
@@ -255,8 +318,6 @@ def main():
     period_event = threading.Event()
     mqttc = mqtt.Client(userdata={
         'conf': conf,
-        'thermostat_status_topic':
-            conf.get('heating', 'thermostat_status_topic'),
         'thermostat_schedule_change_topic':
             conf.get('heating', 'thermostat_schedule_change_topic'),
         'timer_event': period_event,
@@ -270,16 +331,22 @@ def main():
     mqttc.on_message = mqtt_on_message
     mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
 
-    # Hook up handlers for temperature sensors:
+    zone_controllers = []
     for zone in zones:
-        mqttc.message_callback_add(zone.sensor, temperature_message)
+        zone_boiler = MqttBoiler(zone.boiler_relay, mqttc,
+                                 conf.get('heating', 'demand_request_topic'))
+        zone_thermostat = thermostat.Thermostat(zone_boiler)
+        zone_controller = ZoneController(mqttc, zone, zone_boiler, zone_thermostat,
+                                         scheduler_url, auth)
+        zone_controllers.append(zone_controller)
 
     mqttc.loop_start()
+
+    # Update thermostats every second and schedule every 60s:
+    controller = AllZoneController(scheduler_url, auth, zone_controllers)
     while True:
-        scheduler_iteration(mqttc, conf.get('heating', 'target_temp_topic'),
-                            scheduler_url, auth, datetime.datetime.now(),
-                            zones)
-        period_event.wait(timeout=60)
+        controller.iteration(datetime.datetime.now())
+        period_event.wait(timeout=1)
         period_event.clear()
 
     mqttc.loop_stop()

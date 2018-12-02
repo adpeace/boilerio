@@ -26,21 +26,15 @@ EMPTY_SCHEDULE_RESPONSE = """{
 
 @requests_mock.Mocker()
 def test_no_exception_if_request_raises(m):
-    m.get("http://scheduler/api/schedule", exc=requests.exceptions.Timeout)
-    scheduler.scheduler_iteration(None, None, 'http://scheduler/api', None, None, [])
+    m.get("https://scheduler/api/schedule", exc=requests.exceptions.Timeout)
+    zc = scheduler.AllZoneController('https://scheduler/api', None, [])
+    zc.iteration(None)
 
 @requests_mock.Mocker()
 def test_no_exception_if_request_fails(m):
-    m.get("http://scheduler/api/schedule", status_code=401)
-    scheduler.scheduler_iteration(None, None, 'http://scheduler/api', None, None, [])
-
-@requests_mock.Mocker()
-def test_copes_with_no_target(m):
-    m.get("http://scheduler/api/schedule", text=EMPTY_SCHEDULE_RESPONSE)
-    mqttc = Mock()
-    now = datetime.now()
-    scheduler.scheduler_iteration(mqttc, None, "http://scheduler/api", None, now, [])
-    mqttc.publish.assert_not_called()
+    m.get("https://scheduler/api/schedule", status_code=401)
+    zc = scheduler.AllZoneController('https://scheduler/api', None, [])
+    zc.iteration(None)
 
 #
 # Scheduler policy tests

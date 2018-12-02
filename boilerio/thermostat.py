@@ -10,7 +10,7 @@ logger.setLevel(logging.DEBUG)
 class TempReading(object):
     def __init__(self, when, temp):
         self.when = when
-        self.reading= temp
+        self.reading = temp
 
     def __str__(self):
         return "%f deg C at %s" % (self.reading, self.when)
@@ -67,12 +67,18 @@ class Thermostat(object):
             if self._state_change_callback is not None:
                 self._state_change_callback(self._state)
 
+    @property
+    def target(self):
+        return self._target.target if self._target else None
+
     def set_target_temperature(self, target):
         """Set a target temperature.
 
         target: a floating-point target temperature value."""
-        self._target = TemperatureSetting(target)
-        self._pid.reset(target)
+        if (self._target is None or
+           (self._target and self._target.target != target)):
+            self._target = TemperatureSetting(target)
+            self._pid.reset(target)
 
     def update_temperature(self, temp):
         """New temperature reading received.
