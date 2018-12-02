@@ -47,7 +47,7 @@ function mk_override(override_set_ev, zones) {
         '<div class="modal-content">' +
             '<h1>Set override</h1>' +
             '<form><label>Set target:</label> ' +
-            '<input id="override_temp" type="number">&deg;C<br /> ' +
+            '<input id="override_temp" type="number" step="any">&deg;C<br /> ' +
             '<label>Zone</label>' +
             '<select id="override_zone"></select><br />' +
             '<label>Duration:</label> ' +
