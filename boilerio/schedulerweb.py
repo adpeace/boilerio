@@ -29,10 +29,6 @@ def close_db(error):
     if hasattr(g, 'db'):
         g.db.close()
 
-# XXX get rid of this...
-def get_tgt_override_json(db):
-    return [t.to_dict() for t in model.TargetOverride.from_db(db)]
-
 def today_by_time_from_zones(today_by_zone):
     """Pivot a zone -> schedule dictionary to a list of (time, zone, temp).
 
@@ -193,7 +189,7 @@ def get_schedule():
     db = get_db()
     full_schedule = model.FullSchedule.from_db(db)
     json_schedule = full_schedule_to_dict(full_schedule)
-    tgt_override = get_tgt_override_json(db)
+    tgt_override = [t.to_dict() for t in model.TargetOverride.from_db(db)]
     db.commit()
     return jsonify({
         'schedule': json_schedule,
