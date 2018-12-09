@@ -21,11 +21,9 @@ def on_message(client, userdata, msg):
     if msg.topic != userdata['demand_topic']:
         return
 
-    if 'sensor_file' not in userdata:
-        raise RuntimeError, "Not initialised"
-
     try:
         request = json.loads(msg.payload)
+        request['thermostat'] = hex(int(request['thermostat'], 0))
     except:
         logging.error("Error parsing request")
         return
@@ -35,13 +33,18 @@ def on_message(client, userdata, msg):
         logging.error("Invalid or no command specified")
     if 'thermostat' not in request:
         logging.error("Invalid or no thermostat ID specified")
-    userdata['sensor_file'].write("{}{}\n".format(
-        request['command'], hex(int(request['thermostat'], 0))))
-    logging.debug("Published command %s to zone %s", request['command'], request['thermostat'])
+    userdata['command_queue'].append(request)
+    logging.debug("Queued command %s", str(request))
 
 def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
          sensor_filename):
-    userdata = {'demand_topic': demand_topic}
+    # command_queue is a shared queue containing request objects, which are
+    # dictionaries like: {'command': '[O|X|L]', 'thermostat': '0xXXXX'}
+    # Messages are added when received from mqtt and processed in the loop
+    # below, to avoid shared access to the serial device.
+    command_queue = []
+
+    userdata = {'demand_topic': demand_topic, 'command_queue': command_queue}
 
     client = mqtt.Client(userdata=userdata)
     client.username_pw_set(mqtt_user, mqtt_password)
@@ -52,27 +55,47 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
     client.loop_start()
     try:
         sensor_filename = sys.argv[1]
-        with serial.Serial(sensor_filename, 57600, timeout=None) as \
+        # Note that the timeout of 0.5s allows time between commands being
+        # sent/received
+        with serial.Serial(sensor_filename, 57600, timeout=0.5) as \
              sensor_file:
-            userdata['sensor_file'] = sensor_file
-
+            data = ""
             while True:
-                data = sensor_file.readline().strip()
-                try:
-                    direction, tid, cmd = data.split()
-                except:
-                    continue
-                if direction not in ['ISSUE', 'RECV'] or \
-                   cmd not in ['ON', 'OFF', 'LEARN']:
-                    logging.error("Couldn't parse input: {}".format(data))
-                    continue
-                logging.info("Publishing to {}/{} : {}".format(
-                    zone_basetopic, tid, json.dumps({'direction': direction,
-                                                     'cmd': cmd})))
-                client.publish("{}/{}".format(zone_basetopic, tid),
-                               json.dumps({'thermostat': tid,
-                                           'direction': direction,
-                                           'cmd': cmd}))
+                data = data + sensor_file.readline()
+
+                # Was a full message received?  If so, process it, otherwise
+                # keep it until next time.
+                if data.endswith('\n'):
+                    data = data.strip()
+                    try:
+                        direction, tid, cmd = data.split()
+                    except:
+                        logging.error("Couldn't parse input: {}".format(data))
+                        data = ""
+                        continue
+                    if direction not in ['ISSUE', 'RECV'] or \
+                       cmd not in ['ON', 'OFF', 'LEARN']:
+                        logging.error("Couldn't parse input: {}".format(data))
+                        data = ""
+                        continue
+                    msg = {'thermostat': tid,
+                           'direction': direction,
+                           'cmd': cmd}
+                    logging.info("Publishing to {}/{} : {}".format(
+                        zone_basetopic, tid, json.dumps(msg)))
+                    client.publish("{}/{}".format(zone_basetopic, tid),
+                                   json.dumps(msg))
+                    data = ""
+                elif not data:
+                    # Nothing was received; send a command from the queue
+                    try:
+                        request = command_queue.pop()
+                    except IndexError:
+                        # There was nothing in the list
+                        continue
+                    sensor_file.write("{}{}\n".format(
+                        request['command'], request['thermostat']))
+                    logging.debug("Published command %s", str(request))
     finally:
         client.loop_stop()
 
