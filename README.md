@@ -15,7 +15,20 @@ For more information, please see https://hackingathome.wordpress.com.
 
 ## Installation
 
-Check out the repository, then install using `pip`:
+More details on installation to be written.  There are several components that
+need to be configured:
+
+1.  The web application and database, to provide the online component.
+1.  The local scheduler and boiler interface.
+1.  The sensor inputs
+
+You can install from the repository, or simply using `pip` by running:
+
+```
+pip install boilerio
+```
+
+To install from the git repository, first check it out then install using `pip`:
 
 ```
 $ git clone https://github.com/adpeace/boilerio.git
@@ -35,9 +48,8 @@ postgres you can create a database user and database for the scheduler, then
 user scheduler.sql to create the requisite tables.  (This currently assumes the
 databsae and a role exists called `scheduler`.)
 
-2.  The controller.  This is the `scheduler` Python script.  Ensure this
-daemon is running to push target temperature updates to the boiler
-controller (the maintaintemp script) and update the cache of the current
+2.  The controller.  This is the `scheduler` Python script.  Ensure this daemon
+is running to control the boiler relay and update the cache of the current
 temperature in the backend web app.
 
 3.  The web app.  This is the `schedulerweb` Flask app.  The recommended
@@ -45,9 +57,6 @@ configuration is for this to be proxied through nginx and run inside uwsgi.
 
 4.  The web-based UI.  This talks to the schedulerweb app and presents a UI
 where the current temperature and schedule can be configured.
-
-You'll need to the running the `maintaintemp` service also described below to
-issue commands to your boiler.
 
 Example uWSGI configuration for `schedulerweb` (assuming you have the Python
 package installed) - this can be placed in `/etc/uwsgi/apps-available` on
@@ -63,6 +72,15 @@ gid = www-data
 chmod-socket = 664
 ```
 
+### scheduler: The controller
+
+The local scheduler component provides the timer and thermostat behaviour: it
+gets the target temperature periodically from the web service and controls the
+boiler by sending messages to the boiler\_to\_mqtt program.
+
+The scheduler takes no arguments: the configuration will come from the web
+service.
+
 ## boiler\_to\_mqtt
 
 The `boiler_to_mqtt` script implements an MQTT-topic based interface on top
@@ -77,28 +95,6 @@ boiler on/off as needed.
 This service and others in this repository use a common configuration file.  See
 below for more information.
 
-## maintaintemp
-
-This is the main script and implements a PID controller to maintain a given set
-temperature.
-
-Example usage:
-
-```
-$ maintaintemp emon_sensors/emonth5 0xBAB1
-```
-
-The first argument is an MQTT topic from which to get temperature updates.
-These updates should have a JSON payload with an object with at least a
-`temperature` value.  The temperature updates can be at any frequency, but I've
-mostly tested with updates being sent every minute.
-
-The second argument is the thermostat ID to use in messages to the boiler.  For
-the Danfoss RF receiver I've been testing with, you will independently need to
-send a 'learn' command; this should be transmitted repeatedly (with the correct
-thermostat ID) while you hold the 'PROG' and 'CH1/2' button and wait until the
-light flashes green on the controller.
-
 You can send learn packets in a loop with a simple shell loop, if you have the
 mosquitto clients installed and are running the `boiler_to_mqtt.py` script:
 
@@ -110,26 +106,11 @@ while ! read -t 1 ; do
 done
 ```
 
-The ```heating/deamnd``` topic should match the configuration file you set up -
-see below for more information.
-
-The scheduler, mentioend above, will issue commands to this script to set the
-target temperature.  If you don't want to use the scheduler, you can publish
-messages to the MQTT topic listed as the ```target_temp_topic``` in your
-configuration file.  These should be of the form:
-
-```
-{target: 19.5}
-```
-
-For a broad description of the behaviour of this program, please see the blog
-entry on the website mentioned above.
-
 ## boilersim
 
-This is a trivial simulator intended to help debug and improve
-`maintaintemp`.  It follows a really simple heating/cooling model and
-generates a table as output.
+This is a trivial simulator intended to help debug and improve the thermostat.
+It follows a really simple heating/cooling model and generates a table as
+output.
 
 To run, use a command-line such as:
 
@@ -182,11 +163,9 @@ The gnuplot script assumes the simulation output is saved to a file called
 Other than `boilersim`, a config file is needed for the programs here.  This is
 to help make them usable as daemons.
 
-Here is a sample configuration file, to be placed in `/etc/sensors/config`:
-
 ```
 [mqtt]
-host = mqtt.lan
+host = raspi.lan
 user = user
 password = imnottellingyou
 
@@ -194,11 +173,9 @@ password = imnottellingyou
 # Various MQTT topic names to use.  These can be anything but are specified in
 # the config in case you have other software that constrains your choices, and
 # ensures they are consistent across apps.
+
 info_basetopic = heating/zone/info
 demand_request_topic = heating/zone/demand
-temperature_sensor_topic = emon_sensors/emonth5
-target_temp_topic = heating/thermostat/target_temp
-thermostat_status_topic = heating/thermostat/status
 thermostat_schedule_change_topic = heating/thermostat_control/update
 
 scheduler_db_host = hub.lan
@@ -206,10 +183,7 @@ scheduler_db_name = scheduler
 scheduler_db_user = scheduler
 scheduler_db_password = imnottellingyou
 
-scheduler_url = http://localhost/api
-
-# Optional username and password.  If provided, they are used with HTTP basic
-# auth to talk to the scheduler.
-scheduler_username = username
+scheduler_url = https://your_url
+scheduler_username = your_user
 scheduler_password = imnottellingyou
 ```

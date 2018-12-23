@@ -11,7 +11,7 @@ except Exception as error:
     long_description = None
 
 setup(name='boilerio',
-      version='0.0.2',
+      version='0.0.3',
       description='A software thermostat and heating control system',
       url='https://github.com/adpeace/boilerio.git',
       author='Andy Peace',
