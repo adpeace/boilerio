@@ -83,19 +83,20 @@ class Monitor(object):
         """Signal that the boiler was turned on."""
         self._boiler_on_time = None
 
-class Weather(object):
-    def __init__(self, apikey, location):
-        self.apikey = apikey
-        self.location = location
-
-    def get_weather(self):
-        return weather.get_weather(self.apikey, self.location)
-
 class MqttMonitor(Monitor):
     def __init__(self, mqttc, zone_info_topic, sensor_topic, weather,
-                 warmup_interval_s=600, weather_update_interval_s=3600):
+            gradient_callback_fn, warmup_interval_s=600,
+            weather_update_interval_s=3600):
+        """Initialize MqttMonitor.
+
+        gradient_callback_fn is a function that is called when a new
+        gradient is found.  It should take two parameter: 'delta' and
+        'gradient' which are the delta that the gradient was observed at
+        and the inside gradient when heating was on in degrees C per hour.
+        """
         self.weather = weather
         self.weather_update_interval = timedelta(seconds=weather_update_interval_s)
+        self.gradient_callback_fn = gradient_callback_fn
 
         # Set up MQTT callbacks:
         mqttc.message_callback_add(sensor_topic, self.mqtt_temperature_update)
@@ -109,7 +110,8 @@ class MqttMonitor(Monitor):
         data = json.loads(msg.payload)
 
         # Should we update the outside temperature?
-        if (self._outside_temperature_time is None or
+        # XXX using CachingWeather instead...
+        if (self._outside_temperature is None or
             now - self._outside_temperature_time < self.weather_update_interval):
             w = self.weather.get_weather()
             logger.info("Updating weather information: %s", str(w))
@@ -123,7 +125,8 @@ class MqttMonitor(Monitor):
 
         r = self.temperature_update(temp, now)
         if r is not None:
-            logger.info("%s: Temperature gradient result: %s", self.zone_info_topic, str(r))
+            logger.info("%s: Temperature gradient result: %s", msg.topic, str(r))
+            self.gradient_callback_fn(now, r[0], r[1])
 
     def mqtt_relay_update(self, mqttc, userdata, msg):
         logger.debug("%s: %s", msg.topic, msg.payload)
@@ -165,12 +168,23 @@ def main():
     mqttc.on_connect = mqtt_on_connect
     mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
 
+    def post_gradient_fn(zone_id):
+        def post_gradient(when, delta, gradient):
+            data = {'when': when, 'delta': delta, 'gradient': gradient}
+            r = requests.post(scheduler_url +
+                    '/zones/%d/gradient_measurement' % zone_id,
+                    auth=auth, data=data)
+            logger.info("Posted gradient %s for zone %d, status code %d",
+                    str(data), zone_id, r.status_code)
+        return post_gradient
+
     monitors = [
         MqttMonitor(
             mqttc, conf.get('heating', 'info_basetopic') + '/0x' +
             format(int(zone.boiler_relay, 0), 'X'), zone.sensor,
-            Weather(conf.get('weather', 'apikey'),
-                    conf.get('weather', 'location')))
+            weather.Weather(conf.get('weather', 'apikey'),
+                            conf.get('weather', 'location')),
+            post_gradient_fn(zone.zone_id))
         for zone in zones
     ]
 

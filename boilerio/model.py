@@ -156,3 +156,63 @@ class TargetOverride(object):
                        'values (%s, %s, %s)',
                        (self.end, self.temp, self.zone))
 
+class TimeToTarget(object):
+    def __init__(self, zone_id, time_to_target):
+        self.zone_id = zone_id
+        self.time_to_target = time_to_target
+
+    @classmethod
+    def from_db(cls, connection, zone_id):
+        cursor = connection.cursor()
+        cursor.execute("select zone_id, time_to_target from time_to_target "
+                "where zone_id=%s limit 1", (zone_id, ))
+        data = cursor.fetchall()
+        return cls(data[0][0], data[0][1]) if data else None
+
+    @classmethod
+    def delete(cls, connection, zone_id):
+        cursor = connection.cursor()
+        cursor.execute("delete from time_to_target where zone_id=%s",
+                (zone_id, ))
+
+    def save(self, connection):
+        cursor = connection.cursor()
+        cursor.execute('delete from time_to_target where zone_id=%s',
+                (self.zone_id,))
+        cursor.execute('insert into time_to_target '
+                '(zone_id, time_to_target) values (%s, %s)',
+                (self.zone_id, self.time_to_target))
+
+class TemperatureGradientMeasurement(object):
+    """A record of a measured heating gradient."""
+    def __init__(self, zone_id, when, delta, gradient):
+        self.zone_id = zone_id
+        self.when = when
+        self.delta = delta
+        self.gradient = gradient
+
+    def save(self, connection):
+        """Write gradient to database."""
+        cursor = connection.cursor()
+        cursor.execute('insert into gradient_measurement '
+                '(zone, "when", delta, gradient) values '
+                '(%s, %s, %s, %s)',
+                (self.zone_id, self.when, self.delta, self.gradient))
+
+    @staticmethod
+    def get_gradient_table(connection, zone_id):
+        """Return a list o list of temperature gradient averages.
+
+        Returns a list of the form:
+            [ (delta rounded to nearest 0.5, average gradient) ]
+        """
+        cursor = connection.cursor()
+        cursor.execute("select round(2 * cast(delta as numeric), 0) / 2 as d, "
+                "avg(gradient), count(gradient) "
+                "from gradient_measurement where zone=%s"
+                "group by d order by d", (zone_id,))
+        return [{
+            'delta': record[0], 
+            'gradient': record[1],
+            'npoints': record[2]
+            } for record in cursor]

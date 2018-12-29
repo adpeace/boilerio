@@ -1,8 +1,8 @@
 # Note that this file should probably be split into two along with
 # separation of scheduler policy from the scheduler app.
 
-from mock import Mock
-from datetime import time, datetime
+from mock import Mock, MagicMock
+from datetime import time, datetime, timedelta
 from boilerio import model, scheduler
 import requests_mock
 import requests.exceptions
@@ -152,3 +152,42 @@ def test_scheduler_from_json_empty_schedule():
     """Check policy creation from JSON with empty schedule."""
     schedule = scheduler.SchedulerTemperaturePolicy.from_json(
         EMPTY_SCHEDULE_RESPONSE)
+
+#
+# Zone controller tests
+#
+
+@requests_mock.Mocker()
+def test_time_to_target_returns_None_until_initialized(m):
+    mqttc = MagicMock()
+    boiler = MagicMock()
+    zone = MagicMock()
+    thermostat_obj = MagicMock()
+    weather = MagicMock()
+    weather.get_weather.return_value = {'temperature': 5}
+
+    thermostat_obj.target = 20
+    thermostat_obj.state = 'On'
+    zone.sensor = 'sensor' # needs to match msg.topic below
+
+    zc = scheduler.ZoneController(mqttc, zone, boiler, thermostat_obj,
+        'https://scheduler/api', None, weather)
+
+    # There is no gradient table or last recorded temperature:
+    assert zc.get_time_to_target() is None
+
+    # Mock post requests to the temperature cache:   
+    m.post("https://scheduler/api/temperature", status_code=200)
+    msg = MagicMock()
+    msg.payload = '{"temperature": "15.0"}'
+    msg.topic = zone.sensor
+    zc.temp_callback(None, None, msg)
+
+    # Still no gradient table: should return None:
+    assert zc.get_time_to_target() is None
+
+    # Now set a gradient table and check the correct value is used:
+    # XXX shouldn't be setting the gradient table directly...
+    gradient_table = [{'delta': 5.0, 'gradient': 1.0}]
+    zc.gradient_table = gradient_table
+    assert zc.get_time_to_target() == timedelta(hours=5)

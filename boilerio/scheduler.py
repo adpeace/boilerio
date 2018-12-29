@@ -6,8 +6,10 @@ import sys
 import os
 import json
 import datetime
+from datetime import timedelta
 import threading
 import logging
+
 import paho.mqtt.client as mqtt
 import requests
 import requests.exceptions
@@ -16,6 +18,7 @@ from requests.auth import HTTPBasicAuth
 import model
 import config
 import thermostat
+import weather
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -27,7 +30,7 @@ strftime = datetime.datetime.strftime
 class MqttBoiler(object):
     """Control boiler using MQTT commands."""
     # Time after which we might re-issue the same command to the boiler
-    REISSUE_TIMEOUT = datetime.timedelta(0, 120)
+    REISSUE_TIMEOUT = timedelta(0, 120)
 
     def __init__(self, thermostat_id, mqttc, zone_demand_topic):
         self.mqttc = mqttc
@@ -169,14 +172,21 @@ def mqtt_on_message(client, userdata, msg):
 
 class ZoneController(object):
     """Connect a schedule, thermostat, and temperature sensor."""
-
-    def __init__(self, mqttc, zone, boiler, thermostat, scheduler_url,
-                 auth):
+    def __init__(self, mqttc, zone, boiler, thermostat_obj, scheduler_url,
+                 auth, weather, 
+                 gradient_table_update_frequency=timedelta(hours=1)):
         self.zone = zone
         self.boiler = boiler
-        self.thermostat = thermostat
+        self.thermostat = thermostat_obj
+        self.last_temp = None
         self.scheduler_url = scheduler_url
         self.scheduler_auth = auth
+
+        self.gradient_table = []
+        self.last_gradient_table_update = None
+        self.gradient_table_update_frequency = gradient_table_update_frequency
+        self.time_to_target_cleared = False
+        self.weather = weather
 
         mqttc.message_callback_add(zone.sensor, self.temp_callback)
 
@@ -188,9 +198,11 @@ class ZoneController(object):
         try:
             data = json.loads(msg.payload)
             temp = float(data['temperature'])
+            if self.last_temp and temp == self.last_temp.reading:
+                return
 
             now = datetime.datetime.now()
-            temp_reading = thermostat.TempReading(now, temp)
+            self.last_temp = temp_reading = thermostat.TempReading(now, temp)
             r = requests.post(
                 self.scheduler_url + '/temperature',
                 auth=self.scheduler_auth,
@@ -201,12 +213,65 @@ class ZoneController(object):
                 })
             logger.info("Cached temperature update for zone %d: %.2f, result %d",
                         self.zone.zone_id, temp, r.status_code)
+
+            # Update time to target.  Clear it if it should be None and we
+            # haven't done so already, otherwise update it.
+            time_to_target = self.get_time_to_target()
+            if time_to_target is None and not self.time_to_target_cleared:
+                r = requests.delete(
+                        self.scheduler_url +
+                        '/zones/%d/time_to_target' % self.zone.zone_id,
+                        auth = self.scheduler_auth,
+                        timeout=10)
+                if r.status_code == 200:
+                    self.time_to_target_cleared = True
+            elif time_to_target:
+                r = requests.post(
+                        self.scheduler_url +
+                        '/zones/%d/time_to_target' % self.zone.zone_id,
+                        auth=self.scheduler_auth,
+                        timeout=10, data={'time_to_target': time_to_target})
+                if r.status_code == 200:
+                    logger.info("Updated time to target for zone %d to %d",
+                            self.zone.zone_id, time_to_target)
+
         except (requests.exceptions.RequestException, ValueError) as e:
             logger.info("Error updating cached temperature (%s)",
                         str(e))
 
         # Update the thermostat:
         self.thermostat.update_temperature(temp_reading)
+
+    def get_time_to_target(self):
+        """Estimate time to reach temperature target.
+        
+        Returns a timedelta object."""
+        # This algorithm overestimates the time taken because it uses the 
+        # gradient at the start of heating, whereas it should be using an
+        # integral over time.
+
+        # If we're not heating, just return nothing:
+        if (self.thermostat.state != 'On' or self.last_temp is None or
+                self.thermostat.target < self.last_temp.reading):
+            return None
+        else:
+            outside = self.weather.get_weather()
+            delta_t = self.last_temp.reading - outside['temperature']
+
+            # Find a gradient where the delta between inside and out was
+            # closest to the current temperature:
+            match = None
+            for gradient in self.gradient_table:
+                if match is None or (
+                        abs(gradient['delta'] - delta_t)
+                        < abs(match['delta'] - delta_t)):
+                    match = gradient
+
+            # Now use it to estimate heating time:
+            if match is None:
+                return None
+            amount_to_heat = self.thermostat.target - self.last_temp.reading
+            return timedelta(hours=(amount_to_heat / match['gradient']))
 
     def iteration(self, scheduler, now):
         """Update the zone.  Should be called once per second."""
@@ -216,6 +281,18 @@ class ZoneController(object):
             logger.info("Updating target temperature (%s -> %s) for zone %d",
                         str(self.thermostat.target), str(target), self.zone.zone_id)
             self.thermostat.set_target_temperature(target)
+
+        # Update gradient table:
+        if (self.last_gradient_table_update is None or
+                self.last_gradient_table_update + self.gradient_table_update_frequency < now):
+            r = requests.get(
+                    self.scheduler_url + '/zones/%d/gradients' % self.zone.zone_id,
+                    timeout=10, auth=self.scheduler_auth)
+            if r.status_code == 200:
+                self.gradient_table = r.json()
+            else:
+                logger.error("Couldn't update gradients table for zone %d (status %d)",
+                        self.zone.zone_id, r.status_code)
 
         # Update thermostat:
         self.thermostat.interval_elapsed(now)
@@ -261,7 +338,7 @@ class AllZoneController(object):
 
     Interfaces between the web API and a set of local zone controllers."""
 
-    SCHEDULER_UPDATE_INTERVAL = datetime.timedelta(seconds=60)
+    SCHEDULER_UPDATE_INTERVAL = timedelta(seconds=60)
 
     def __init__(self, scheduler_url, auth, zone_controllers):
         self.scheduler = None
@@ -332,12 +409,14 @@ def main():
     mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
 
     zone_controllers = []
+    weather_obj = weather.CachingWeather(conf.get('weather', 'apikey'),
+            conf.get('weather', 'location'))
     for zone in zones:
         zone_boiler = MqttBoiler(zone.boiler_relay, mqttc,
                                  conf.get('heating', 'demand_request_topic'))
         zone_thermostat = thermostat.Thermostat(zone_boiler)
         zone_controller = ZoneController(mqttc, zone, zone_boiler, zone_thermostat,
-                                         scheduler_url, auth)
+                                         scheduler_url, auth, weather_obj)
         zone_controllers.append(zone_controller)
 
     mqttc.loop_start()

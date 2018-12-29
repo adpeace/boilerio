@@ -1,13 +1,23 @@
 #!/usr/bin/env python
 
+# This API has grown over time and is somewhat messy.  New additions using
+# flask-restplus to help keep things in order, but the older parts of the code
+# should probably also be migrated to restplus.
+
 import datetime
+import logging
+
 from flask import Flask, jsonify, request, g
+from flask_restplus import Api, Resource, Model, fields
 
 import model
 from scheduler import SchedulerTemperaturePolicy
 from config import load_config
 
+logging.basicConfig(level=logging.INFO)
+
 app = Flask(__name__)
+api = Api(app, description="Partially migrated to restplus: some APIs are not included here.")
 
 def get_conf():
     if not hasattr(g, 'conf'):
@@ -28,6 +38,68 @@ def get_db():
 def close_db(error):
     if hasattr(g, 'db'):
         g.db.close()
+
+# --------------------------------------------------------------------------
+
+a_gradient_measurement = api.model('Temperature gradient', {
+    'when': fields.DateTime(format="%Y-%m-%dT%H:%M", 
+        description="Date/time the measurement was taken."),
+    'delta': fields.Float(description="Difference between inside and "
+        "outside temperature at the start of the measurement."),
+    'gradient': fields.Float(description="The temperature gradient in "
+        "degrees C per hour.")
+    })
+a_gradient_average = api.model('Temperature gradient average', {
+    'delta': fields.Float(description="Difference between inside and "
+        "outside temperature"),
+    'gradient': fields.Float(description="Average temperature gradient "
+        "with heating on at temperature difference of delta."),
+    'npoints': fields.Integer(description="Number of data points contributing "
+        "to the average value given."),
+    })
+
+@api.route('/zones/<int:zone_id>/gradient_measurements')
+class Gradient(Resource):
+    @api.expect(a_gradient_measurement)
+    def post(self, zone_id):
+        tgm = model.TemperatureGradientMeasurement(
+                zone_id, api.payload['when'], api.payload['delta'],
+                api.payload['gradient'])
+        db = get_db()
+        tgm.save(db)
+        db.commit()
+
+@api.route('/zones/<int:zone_id>/gradients')
+class GradientTable(Resource):
+    @api.marshal_list_with(a_gradient_average)
+    def get(self, zone_id):
+        db = get_db()
+        r = model.TemperatureGradientMeasurement.get_gradient_table(
+                db, zone_id)
+        return r
+
+@api.route('/zones/<int:zone_id>/time_to_target')
+@api.param('zone_id', 'Zone ID for the time to target.')
+class TimeToTarget(Resource):
+    @api.param('time_to_target', 'Integer seconds until temperature is reached.', type=int)
+    def post(self, zone_id):
+        db = get_db()
+        ttt = model.TimeToTarget(zone_id, request.values['time_to_target'])
+        ttt.save(db)
+        db.commit()
+
+    def get(self, zone_id):
+        db = get_db()
+        ttt = model.TimeToTarget.from_db(db, zone_id)
+        db.commit()
+        return ttt.time_to_target if ttt else None
+
+    def delete(self, zone_id):
+        db = get_db()
+        model.TimeToTarget.delete(db, zone_id)
+        db.commit()
+
+# --------------------------------------------------------------------------
 
 def today_by_time_from_zones(today_by_zone):
     """Pivot a zone -> schedule dictionary to a list of (time, zone, temp).
@@ -80,6 +152,8 @@ def get_summary():
         zid = zone['zone_id']
 
         zone['target'] = scheduler.target(now, zid)
+        ttt = model.TimeToTarget.from_db(db, zid)
+        zone['time_to_target'] = ttt.time_to_target if ttt else None
         
         # We may have a stale override so check that the target is actually
         # being overriden:
@@ -282,4 +356,4 @@ def set_target_override():
     return ('', 200)
 
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)

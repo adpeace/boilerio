@@ -71,6 +71,10 @@ class Thermostat(object):
     def target(self):
         return self._target.target if self._target else None
 
+    @property
+    def state(self):
+        return self._state
+
     def set_target_temperature(self, target):
         """Set a target temperature.
 
