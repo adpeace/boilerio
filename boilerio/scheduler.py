@@ -181,7 +181,7 @@ class ZoneController(object):
         mqttc.message_callback_add(zone.sensor, self.temp_callback)
 
     def temp_callback(self, client, userdata, msg):
-        if self.zone.sensor!= msg.topic:
+        if self.zone.sensor != msg.topic:
             return
         # This should probably be in its own class: update the cached
         # temperature value on the server:
