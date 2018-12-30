@@ -191,56 +191,60 @@ class ZoneController(object):
         mqttc.message_callback_add(zone.sensor, self.temp_callback)
 
     def temp_callback(self, client, userdata, msg):
-        if self.zone.sensor != msg.topic:
-            return
-        # This should probably be in its own class: update the cached
-        # temperature value on the server:
         try:
-            data = json.loads(msg.payload)
-            temp = float(data['temperature'])
-            if self.last_temp and temp == self.last_temp.reading:
+            if self.zone.sensor != msg.topic:
                 return
+            # This should probably be in its own class: update the cached
+            # temperature value on the server:
+            try:
+                data = json.loads(msg.payload)
+                temp = float(data['temperature'])
+                if self.last_temp and temp == self.last_temp.reading:
+                    return
 
-            now = datetime.datetime.now()
-            self.last_temp = temp_reading = thermostat.TempReading(now, temp)
-            r = requests.post(
-                self.scheduler_url + '/temperature',
-                auth=self.scheduler_auth,
-                timeout=10, data={
-                    'when': strftime(now, "%Y-%m-%dT%H:%M:%S"),
-                    'temp': temp,
-                    'zone': self.zone.zone_id
-                })
-            logger.info("Cached temperature update for zone %d: %.2f, result %d",
-                        self.zone.zone_id, temp, r.status_code)
-
-            # Update time to target.  Clear it if it should be None and we
-            # haven't done so already, otherwise update it.
-            time_to_target = self.get_time_to_target()
-            if time_to_target is None and not self.time_to_target_cleared:
-                r = requests.delete(
-                        self.scheduler_url +
-                        '/zones/%d/time_to_target' % self.zone.zone_id,
-                        auth = self.scheduler_auth,
-                        timeout=10)
-                if r.status_code == 200:
-                    self.time_to_target_cleared = True
-            elif time_to_target:
+                now = datetime.datetime.now()
+                self.last_temp = temp_reading = thermostat.TempReading(now, temp)
                 r = requests.post(
-                        self.scheduler_url +
-                        '/zones/%d/time_to_target' % self.zone.zone_id,
-                        auth=self.scheduler_auth,
-                        timeout=10, data={'time_to_target': time_to_target})
-                if r.status_code == 200:
-                    logger.info("Updated time to target for zone %d to %d",
-                            self.zone.zone_id, time_to_target)
+                    self.scheduler_url + '/temperature',
+                    auth=self.scheduler_auth,
+                    timeout=10, data={
+                        'when': strftime(now, "%Y-%m-%dT%H:%M:%S"),
+                        'temp': temp,
+                        'zone': self.zone.zone_id
+                    })
+                logger.info("Cached temperature update for zone %d: %.2f, result %d",
+                            self.zone.zone_id, temp, r.status_code)
 
-        except (requests.exceptions.RequestException, ValueError) as e:
-            logger.info("Error updating cached temperature (%s)",
-                        str(e))
+                # Update time to target.  Clear it if it should be None and we
+                # haven't done so already, otherwise update it.
+                time_to_target = self.get_time_to_target()
+                if time_to_target is None and not self.time_to_target_cleared:
+                    r = requests.delete(
+                            self.scheduler_url +
+                            '/zones/%d/time_to_target' % self.zone.zone_id,
+                            auth = self.scheduler_auth,
+                            timeout=10)
+                    if r.status_code == 200:
+                        self.time_to_target_cleared = True
+                elif time_to_target:
+                    r = requests.post(
+                            self.scheduler_url +
+                            '/zones/%d/time_to_target' % self.zone.zone_id,
+                            auth=self.scheduler_auth,
+                            timeout=10, data={'time_to_target': time_to_target})
+                    if r.status_code == 200:
+                        logger.info("Updated time to target for zone %d to %d",
+                                self.zone.zone_id, time_to_target)
 
-        # Update the thermostat:
-        self.thermostat.update_temperature(temp_reading)
+            except (requests.exceptions.RequestException, ValueError) as e:
+                logger.info("Error updating cached temperature (%s)",
+                            str(e))
+
+            # Update the thermostat:
+            self.thermostat.update_temperature(temp_reading)
+        except Exception, e:
+            logger.critical("Exception escaped from MQTT handler ZoneController for zone %s.",
+                    str(self.zone), exc_info=True)
 
     def get_time_to_target(self):
         """Estimate time to reach temperature target.
