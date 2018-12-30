@@ -257,7 +257,8 @@ class ZoneController(object):
     def report_updated_state(self):
         url = self.scheduler_url + '/zones/%d/reported_state' % self.zone.zone_id
         self.reported_state['target'] = self.thermostat.target
-        self.reported_state['time_to_target'] = self.get_time_to_target()
+        ttt = self.get_time_to_target()
+        self.reported_state['time_to_target'] = ttt.total_seconds() if ttt else None
         r = requests.post(url, auth=self.scheduler_auth,
             timeout=10, json=self.reported_state)
         if r.status_code == 200:
@@ -286,6 +287,7 @@ class ZoneController(object):
                     timeout=10, auth=self.scheduler_auth)
             if r.status_code == 200:
                 self.gradient_table = r.json()
+                self.last_gradient_table_update = now
             else:
                 logger.error("Couldn't update gradients table for zone %d (status %d)",
                         self.zone.zone_id, r.status_code)

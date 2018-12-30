@@ -42,8 +42,7 @@ def close_db(error):
 # --------------------------------------------------------------------------
 
 a_gradient_measurement = api.model('Temperature gradient', {
-    'when': fields.DateTime(format="%Y-%m-%dT%H:%M", 
-        description="Date/time the measurement was taken."),
+    'when': fields.DateTime(description="Date/time the measurement was taken."),
     'delta': fields.Float(description="Difference between inside and "
         "outside temperature at the start of the measurement."),
     'gradient': fields.Float(description="The temperature gradient in "

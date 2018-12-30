@@ -170,10 +170,11 @@ def main():
 
     def post_gradient_fn(zone_id):
         def post_gradient(when, delta, gradient):
-            data = {'when': when, 'delta': delta, 'gradient': gradient}
+            data = {'when': when.isoformat(), 'delta': delta,
+                    'gradient': gradient}
             r = requests.post(scheduler_url +
-                    '/zones/%d/gradient_measurement' % zone_id,
-                    auth=auth, data=data)
+                    '/zones/%d/gradient_measurements' % zone_id,
+                    auth=auth, json=data)
             logger.info("Posted gradient %s for zone %d, status code %d",
                     str(data), zone_id, r.status_code)
         return post_gradient
