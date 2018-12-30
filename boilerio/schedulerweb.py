@@ -8,7 +8,7 @@ import datetime
 import logging
 
 from flask import Flask, jsonify, request, g
-from flask_restplus import Api, Resource, Model, fields
+from flask_restplus import Api, Resource, Model, fields, marshal
 
 import model
 from scheduler import SchedulerTemperaturePolicy
@@ -78,26 +78,34 @@ class GradientTable(Resource):
                 db, zone_id)
         return r
 
-@api.route('/zones/<int:zone_id>/time_to_target')
+a_device_state = api.model('Device reported state', {
+    'time_to_target': fields.Integer(description="Seconds until target reached."),
+    'state': fields.String(description="State of device."),
+    'target': fields.Float(description="Target the device is working towards."),
+    'current_temp': fields.Float(description='Current temperature '
+        'reported by the device.'),
+    })
+
+@api.route('/zones/<int:zone_id>/reported_state')
 @api.param('zone_id', 'Zone ID for the time to target.')
-class TimeToTarget(Resource):
-    @api.param('time_to_target', 'Integer seconds until temperature is reached.', type=int)
+class ReportedState(Resource):
+    @api.expect(a_device_state)
     def post(self, zone_id):
         db = get_db()
-        ttt = model.TimeToTarget(zone_id, request.values['time_to_target'])
-        ttt.save(db)
+        device_state = model.DeviceState(
+                datetime.datetime.now(),
+                zone_id, api.payload['state'], api.payload['target'],
+                api.payload['current_temp'],
+                api.payload['time_to_target'])
+        device_state.save(db)
         db.commit()
 
+    @api.marshal_with(a_device_state)
     def get(self, zone_id):
         db = get_db()
-        ttt = model.TimeToTarget.from_db(db, zone_id)
+        device_state = model.DeviceState.from_db(db, zone_id)
         db.commit()
-        return ttt.time_to_target if ttt else None
-
-    def delete(self, zone_id):
-        db = get_db()
-        model.TimeToTarget.delete(db, zone_id)
-        db.commit()
+        return device_state
 
 # --------------------------------------------------------------------------
 
@@ -143,7 +151,6 @@ def get_summary():
                             for z in zones],
                            cmp=lambda x, y: cmp(x['zone_id'], y['zone_id']))
     target_overrides = model.TargetOverride.from_db(db)
-    current_temps = model.get_cached_temperatures(db)
 
     scheduler = SchedulerTemperaturePolicy(
         schedule, target_overrides)
@@ -152,8 +159,8 @@ def get_summary():
         zid = zone['zone_id']
 
         zone['target'] = scheduler.target(now, zid)
-        ttt = model.TimeToTarget.from_db(db, zid)
-        zone['time_to_target'] = ttt.time_to_target if ttt else None
+        reported_state = model.DeviceState.from_db(db, zid)
+        zone['reported_state'] = marshal(reported_state, a_device_state)
         
         # We may have a stale override so check that the target is actually
         # being overriden:
@@ -165,12 +172,6 @@ def get_summary():
                 zone['target_override'] = None
         else:
             zone['target_override'] = None
-
-        zone_temp = [zt for zt in current_temps if zt.zone_id == zid]
-        if len(zone_temp) == 1:
-            zone['current_temp'] = zone_temp[0].temp
-        else:
-            zone['current_temp'] = None
 
     today_by_zone = {z.zone_id: scheduler.get_day(now.weekday(), z.zone_id)
                      for z in zones}

@@ -67,6 +67,9 @@ class Thermostat(object):
             if self._state_change_callback is not None:
                 self._state_change_callback(self._state)
 
+    def set_state_change_callback(self, state_change_callback):
+        self._state_change_callback = state_change_callback
+
     @property
     def target(self):
         return self._target.target if self._target else None

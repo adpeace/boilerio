@@ -12,42 +12,6 @@ def db_connect(host, db, user, pw):
     conn = psycopg2.connect(connect_string)
     return conn
 
-def update_last_state(db, when, state):
-    """ Update cached state value. """
-    cursor = db.cursor()
-    cursor.execute('delete from state_cache;')
-    cursor.execute('insert into state_cache '
-                   '(state, updated) values (%s, %s);',
-                   (state, when))
-
-def get_last_state(db):
-    """ Return cached temperature value. """
-    cursor = db.cursor()
-    cursor.execute('select state, updated from state_cache '
-                   'limit 1;')
-    results = cursor.fetchall()
-    if len(results) == 1:
-        r1 = results[0]
-        return r1[0]
-    else:
-        return None
-
-def update_last_temperature(db, when, temp, zone):
-    """ Update cached temperature value. """
-    cursor = db.cursor()
-    cursor.execute('delete from temperature_cache where zone=%s;', (zone, ))
-    cursor.execute('insert into temperature_cache '
-                   '(temperature, updated, zone) values (%s, %s, %s);',
-                   (temp, when, zone))
-
-def get_cached_temperatures(db):
-    """ Return cached temperature value. """
-    cursor = db.cursor()
-    cursor.execute('select temperature, updated, zone '
-                   'from temperature_cache;')
-    results = cursor.fetchall()
-    return [TempReading(r[1], r[0], r[2]) for r in results]
-
 class FullSchedule(object):
     """ The heating schedule. """
     def __init__(self, entries):
@@ -155,6 +119,46 @@ class TargetOverride(object):
         cursor.execute('insert into override (until, temp, zone) '
                        'values (%s, %s, %s)',
                        (self.end, self.temp, self.zone))
+
+class DeviceState(object):
+    """The state reported by a device.
+
+    Includes:
+     - 'received' - the date/time in UTC the device report was received.
+     - 'zone_id' - zone ID for the device
+     - 'target' - the target temperature the device is using
+     - 'current_temp' - the temperature the device currently sees.
+     - 'time_to_target' - time to a new target (or null)
+    """
+    def __init__(self, received, zone_id, state, target, current_temp, time_to_target):
+        self.received = received
+        self.zone_id = zone_id
+        self.state = state
+        self.target = target
+        self.current_temp = current_temp
+        self.time_to_target = time_to_target
+
+    def save(self, connection):
+        cursor = connection.cursor()
+        cursor.execute('delete from device_reported_state where zone_id=%s',
+                (self.zone_id,))
+        cursor.execute('insert into device_reported_state '
+                '(zone_id, received, state, target, current_temp, '
+                'time_to_target) values (%s, %s, %s, %s, %s, %s)',
+                (self.zone_id, self.received, self.state, self.target,
+                    self.current_temp, self.time_to_target))
+
+    @classmethod
+    def from_db(cls, connection, zone_id):
+        cursor = connection.cursor()
+        cursor.execute('select received, state, target, current_temp, '
+                'time_to_target from device_reported_state '
+                'where zone_id=%s limit 1', (zone_id,))
+        data = cursor.fetchall()
+        if not data:
+            return None
+        data = data[0]
+        return cls(data[0], zone_id, data[1], data[2], data[3], data[4])
 
 class TimeToTarget(object):
     def __init__(self, zone_id, time_to_target):
