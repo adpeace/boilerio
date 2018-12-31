@@ -8,6 +8,9 @@ logger.setLevel(logging.DEBUG)
 
 WEATHER_API_ENDPOINT = 'https://api.openweathermap.org/data/2.5/weather'
 
+class WeatherServiceError(Exception):
+    pass
+
 def get_weather(apikey, city):
     """Return a simplified weather result:
 
@@ -18,18 +21,23 @@ def get_weather(apikey, city):
     """
     r = requests.get(WEATHER_API_ENDPOINT, params={
         'q': city, 'apikey': apikey, 'units': 'metric'})
-    result = r.json()
-    try:
-        return {
-            'temperature': float(result['main']['temp']),
-            'humidity': float(result['main']['humidity']),
-            'sunrise': long(result['sys']['sunrise']),
-            'sunset': long(result['sys']['sunset']),
-            }
-    except Exception, e:
-        logger.error("Couldn't get weather: %s (response %s; code %d)",
-                str(e), r.text, r.status_code)
-        raise
+    if r.status_code == 200:
+        result = r.json()
+        try:
+            return {
+                'temperature': float(result['main']['temp']),
+                'humidity': float(result['main']['humidity']),
+                'sunrise': long(result['sys']['sunrise']),
+                'sunset': long(result['sys']['sunset']),
+                }
+        except Exception, e:
+            logger.error("Couldn't get weather: %s (response %s; code %d)",
+                    str(e), r.text, r.status_code)
+            raise
+    else:
+        logger.error("Couldn't get weather: response %s; code %d",
+                r.text, r.status_code)
+        raise WeatherServiceError(r)
 
 class Weather(object):
     """Get weather data for a fixed location and apikey."""
@@ -57,6 +65,10 @@ class CachingWeather(Weather):
         now = now_fn()
         if (self._last_result is None or self._last_updated is None or 
                 self._last_updated + self._cache_time < now):
-            self._last_result = super(CachingWeather, self).get_weather()
-            self._last_updated = now
+            try:
+                self._last_result = super(CachingWeather, self).get_weather()
+                self._last_updated = now
+            except WeatherServiceError, e:
+                logger.info("Failed to get updated weather information, using "
+                        "cached result")
         return self._last_result
