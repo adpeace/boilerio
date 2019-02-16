@@ -139,7 +139,7 @@ class MqttMonitor(Monitor):
 
 def main():
     conf = config.load_config()
-   
+
     # Get zone information:
     # If the 'heating' section of the config has a 'scheduler_username' and
     # 'scheduler_password' entry, we use these with HTTP basic auth.

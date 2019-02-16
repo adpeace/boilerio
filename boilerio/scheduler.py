@@ -173,7 +173,7 @@ def mqtt_on_message(client, userdata, msg):
 class ZoneController(object):
     """Connect a schedule, thermostat, and temperature sensor."""
     def __init__(self, mqttc, zone, boiler, thermostat_obj, scheduler_url,
-                 auth, weather, 
+                 auth, weather,
                  gradient_table_update_frequency=timedelta(hours=1)):
         self.zone = zone
         self.boiler = boiler
@@ -225,9 +225,9 @@ class ZoneController(object):
 
     def get_time_to_target(self):
         """Estimate time to reach temperature target.
-        
+
         Returns a timedelta object."""
-        # This algorithm overestimates the time taken because it uses the 
+        # This algorithm overestimates the time taken because it uses the
         # gradient at the start of heating, whereas it should be using an
         # integral over time.
 

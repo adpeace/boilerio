@@ -23,7 +23,7 @@ def test_device_modulated():
     period = timedelta(0,600)
     off_before = timedelta(0,301)
     c = pwm.PWM(0.5, timedelta(0, 600), mock_device)
-    
+
     now = datetime.now()
     c.update(now)
     mock_device.off.assert_not_called()

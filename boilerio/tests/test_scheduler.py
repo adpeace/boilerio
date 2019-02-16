@@ -44,9 +44,9 @@ def test_from_json_one_override():
     """Check JSON parsing for simple configuration with one override."""
 
     schedule_json_one_override = """{
-        "schedule": { "0": [], "1": [], "2": [], "3": [], "4": [], "5": [], 
+        "schedule": { "0": [], "1": [], "2": [], "3": [], "4": [], "5": [],
                       "6": [] },
-        "target_override": [ 
+        "target_override": [
             {"zone": 1, "temp": 22, "until": "2018-10-10T10:10"}
         ]
     }"""
@@ -60,7 +60,7 @@ def test_from_json_simple_schedule():
 
     schedule_json_one_override = """{
         "schedule": { "0": [{
-                        "when": "10:00", 
+                        "when": "10:00",
                         "zones": [{ "temp": 19, "zone": 1 }]
                         }],
                       "1": [{
@@ -118,7 +118,7 @@ def test_zones_dont_interfere():
 def test_zones_changing_simultaneously():
     schedule_json_changing_simultaneously = """{
         "schedule": { "0": [{
-                        "when": "10:00", 
+                        "when": "10:00",
                         "zones": [{ "temp": 19, "zone": 1 }]
                         }, {
                         "when": "11:00",
@@ -176,7 +176,7 @@ def test_time_to_target_returns_None_until_initialized(m):
     # There is no gradient table or last recorded temperature:
     assert zc.get_time_to_target() is None
 
-    # Mock post requests to the temperature cache:   
+    # Mock post requests to the temperature cache:
     m.post("https://scheduler/api/temperature", status_code=200)
     msg = MagicMock()
     msg.payload = '{"temperature": "15.0"}'

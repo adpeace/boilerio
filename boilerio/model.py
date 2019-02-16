@@ -216,7 +216,7 @@ class TemperatureGradientMeasurement(object):
                 "from gradient_measurement where zone=%s"
                 "group by d order by d", (zone_id,))
         return [{
-            'delta': record[0], 
+            'delta': record[0],
             'gradient': record[1],
             'npoints': record[2]
             } for record in cursor]

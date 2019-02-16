@@ -121,7 +121,7 @@ def today_by_time_from_zones(today_by_zone):
     # going for something more readable here.
     for zone in today_by_zone:
         for tbz_entry in today_by_zone[zone]:
-            tbz_when, tbz_zone, tbz_temp = tbz_entry 
+            tbz_when, tbz_zone, tbz_temp = tbz_entry
             inserted = False
             for tbt_entry in today_by_time:
                 if tbt_entry['when'] == tbz_when:
@@ -146,7 +146,7 @@ def get_summary():
     schedule = model.FullSchedule.from_db(db)
 
     zones = model.Zone.all_from_db(db)
-    zones_summary = sorted([{'zone_id': z.zone_id, 'name': z.name} 
+    zones_summary = sorted([{'zone_id': z.zone_id, 'name': z.name}
                             for z in zones],
                            cmp=lambda x, y: cmp(x['zone_id'], y['zone_id']))
     target_overrides = model.TargetOverride.from_db(db)
@@ -160,7 +160,7 @@ def get_summary():
         zone['target'] = scheduler.target(now, zid)
         reported_state = model.DeviceState.from_db(db, zid)
         zone['reported_state'] = marshal(reported_state, a_device_state)
-        
+
         # We may have a stale override so check that the target is actually
         # being overriden:
         if scheduler.target_overridden(now, zid):
@@ -174,7 +174,7 @@ def get_summary():
 
     today_by_zone = {z.zone_id: scheduler.get_day(now.weekday(), z.zone_id)
                      for z in zones}
-        
+
     db.commit()
     result = {
         'zones': zones_summary,
