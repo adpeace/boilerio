@@ -114,7 +114,7 @@ function renderSchedule(sched, zones, dow, highlighted_entry, editable) {
                 pos += 1;
             }
         }
-        
+
         var new_entry = {
             when: timeval,
             zones: zones.map(function(zone) {
@@ -122,10 +122,10 @@ function renderSchedule(sched, zones, dow, highlighted_entry, editable) {
                     if (isNaN(tempval))
                         tempval = null;
                     return {
-                        zone: zone.zone_id, 
+                        zone: zone.zone_id,
                         temp: tempval
                         };
-                   }).filter(e => e.temp) 
+                   }).filter(e => e.temp)
                    /* only include zones with values */
             };
         sched.splice(pos - 1, 0, new_entry);
@@ -265,17 +265,21 @@ function renderSummary(summary) {
 
     // Current and target temperatures
     var current_div = $('<div id="current">');
-    summary.zones.sort((a,b) => (a.zone_id > b.zone_id) ? 1 : 
-                                 ((b.zone_id > a.zone_id) ? -1 : 0)); 
+    summary.zones.sort((a,b) => (a.zone_id > b.zone_id) ? 1 :
+                                 ((b.zone_id > a.zone_id) ? -1 : 0));
 
     summary.zones.forEach(function(zone) {
         var current_location_p = $("<h1>").text(zone.name);
+        var friendly_state = zone.reported_state.state ? zone.reported_state.state : '';
+        if (friendly_state == "PWM")
+            friendly_state = "Maintaining";
+        current_location_p.append(': ', friendly_state);
         var current_p = $('<p>');
-        var current_val = zone.current_temp ? zone.current_temp.toFixed(1) : "---";
+        var current_val = zone.reported_state.current_temp ? zone.reported_state.current_temp.toFixed(1) : "---";
         current_p.append(current_location_p);
         current_p.append($('<span class="current">').text(current_val).append("&deg;C "));
 
-        current_p.append($('<span class="' + 
+        current_p.append($('<span class="' +
             (zone.target_override ? 'overridden' : 'target') +
             '">').text(zone.target == null ? "(---)" : "(" + zone.target.toString() + "").append("&deg;C)"));
         current_div.append(current_p);
@@ -284,6 +288,22 @@ function renderSummary(summary) {
             var until = new Date(zone.target_override.until);
             override_text.append(until.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
             current_div.append(override_text);
+        }
+        // Need to not display this if the requested target has not been acknowledged.
+        if (zone.reported_state.time_to_target &&
+                zone.reported_state.target &&
+                zone.reported_state.current_temp &&
+                zone.reported_state.target == zone.target &&
+                zone.target > zone.reported_state.current_temp) {
+            // Convert to 'Will reach <target> in <X> minutes', or '<5 minutes'.
+            var str = "Will reach " + zone.target.toString() + "&deg;C in ";
+            if (zone.reported_state.time_to_target < 300)
+                str += "<5 minutes"
+            else {
+                var time_in_mins = zone.reported_state.time_to_target / 60
+                str += time_in_mins.toFixed(0).toString() + " minutes"
+            }
+            current_div.append($("<p>").html(str));
         }
     });
 
