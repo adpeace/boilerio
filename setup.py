@@ -29,6 +29,6 @@ setup(name='boilerio',
         'maintaintemp=boilerio.maintaintemp:main',
         ]},
       setup_requires=['pytest-runner'],
-      install_requires=['Flask', 'requests', 'psycopg2', 'paho-mqtt', 'flask_restplus'],
+      install_requires=['Flask', 'requests', 'psycopg2-binary', 'paho-mqtt', 'flask_restplus', 'pyserial'],
       tests_require=['pytest', 'requests-mock', 'mock'],
       zip_safe=False)

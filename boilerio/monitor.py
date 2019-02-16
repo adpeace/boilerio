@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 class Monitor(object):
-    CAPTURE_FIRST, CAPTURE_INTERVAL = range(2)
+    CAPTURE_FIRST, CAPTURE_INTERVAL = list(range(2))
 
     def __init__(self, warmup_interval_s=600):
         self._boiler_on_time = None
@@ -119,7 +119,7 @@ class MqttMonitor(Monitor):
 
         try:
             temp = float(data['temperature'])
-        except ValueError, e:
+        except ValueError as e:
             logging.error("Unable to parse temperature value %s, ignoring", data['temperature'])
             return
 

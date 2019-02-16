@@ -39,6 +39,12 @@ $ pip install .
 Use `-e` to `pip` to install in development mode (i.e. just link to the
 checked-out source instead of installing it).
 
+To run the scheduler flask application for development, using `flask run`:
+
+```
+$ FLASK_APP=boilerio/schedulerweb.py flask run
+```
+
 ## The scheduler
 
 The scheduler comes in four parts:

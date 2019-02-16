@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 # This API has grown over time and is somewhat messy.  New additions using
 # flask-restplus to help keep things in order, but the older parts of the code
 # should probably also be migrated to restplus.
@@ -10,9 +8,9 @@ import logging
 from flask import Flask, jsonify, request, g
 from flask_restplus import Api, Resource, Model, fields, marshal
 
-import model
-from scheduler import SchedulerTemperaturePolicy
-from config import load_config
+from . import model
+from .scheduler import SchedulerTemperaturePolicy
+from .config import load_config
 
 logging.basicConfig(level=logging.INFO)
 
@@ -133,7 +131,7 @@ def today_by_time_from_zones(today_by_zone):
                     'when': tbz_when,
                     'zones': [{'zone': zone, 'temp': tbz_temp}],
                     })
-    today_by_time.sort(cmp=lambda x,y: cmp(x['when'], y['when']))
+    today_by_time.sort(key=lambda x: x['when'])
     # Map times to strings in returned value:
     return [{'when': entry['when'].strftime('%H:%M'), 'zones': entry['zones']}
             for entry in today_by_time]
@@ -148,7 +146,7 @@ def get_summary():
     zones = model.Zone.all_from_db(db)
     zones_summary = sorted([{'zone_id': z.zone_id, 'name': z.name}
                             for z in zones],
-                           cmp=lambda x, y: cmp(x['zone_id'], y['zone_id']))
+                           key=lambda x: x['zone_id'])
     target_overrides = model.TargetOverride.from_db(db)
 
     scheduler = SchedulerTemperaturePolicy(
@@ -354,6 +352,3 @@ def set_target_override():
     db.commit()
 
     return ('', 200)
-
-if __name__ == "__main__":
-    app.run(debug=True)

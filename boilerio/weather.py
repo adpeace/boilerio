@@ -27,10 +27,10 @@ def get_weather(apikey, city):
             return {
                 'temperature': float(result['main']['temp']),
                 'humidity': float(result['main']['humidity']),
-                'sunrise': long(result['sys']['sunrise']),
-                'sunset': long(result['sys']['sunset']),
+                'sunrise': int(result['sys']['sunrise']),
+                'sunset': int(result['sys']['sunset']),
                 }
-        except Exception, e:
+        except Exception as e:
             logger.error("Couldn't get weather: %s (response %s; code %d)",
                     str(e), r.text, r.status_code)
             raise
@@ -68,7 +68,7 @@ class CachingWeather(Weather):
             try:
                 self._last_result = super(CachingWeather, self).get_weather()
                 self._last_updated = now
-            except WeatherServiceError, e:
+            except WeatherServiceError as e:
                 logger.info("Failed to get updated weather information, using "
                         "cached result")
         return self._last_result

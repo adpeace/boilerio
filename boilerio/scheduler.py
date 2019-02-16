@@ -15,10 +15,10 @@ import requests
 import requests.exceptions
 from requests.auth import HTTPBasicAuth
 
-import model
-import config
-import thermostat
-import weather
+from . import model
+from . import config
+from . import thermostat
+from . import weather
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -219,7 +219,7 @@ class ZoneController(object):
 
             # Update the thermostat:
             self.thermostat.update_temperature(temp_reading)
-        except Exception, e:
+        except Exception as e:
             logger.critical("Exception escaped from MQTT handler ZoneController for zone %s.",
                     str(self.zone), exc_info=True)
 

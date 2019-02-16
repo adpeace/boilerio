@@ -61,7 +61,7 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
              sensor_file:
             data = ""
             while True:
-                data = data + sensor_file.readline()
+                data = data + sensor_file.readline().decode('utf-8')
 
                 # Was a full message received?  If so, process it, otherwise
                 # keep it until next time.
@@ -94,7 +94,7 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
                         # There was nothing in the list
                         continue
                     sensor_file.write("{}{}\n".format(
-                        request['command'], request['thermostat']))
+                        request['command'], request['thermostat']).encode())
                     logging.debug("Published command %s", str(request))
     finally:
         client.loop_stop()
