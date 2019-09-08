@@ -81,7 +81,7 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
                     msg = {'thermostat': tid,
                            'direction': direction,
                            'cmd': cmd}
-                    logging.info("Publishing to {}/{} : {}".format(
+                    logging.info("Publishing update to {}/{} : {}".format(
                         zone_basetopic, tid, json.dumps(msg)))
                     client.publish("{}/{}".format(zone_basetopic, tid),
                                    json.dumps(msg))
@@ -95,7 +95,7 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
                         continue
                     sensor_file.write("{}{}\n".format(
                         request['command'], request['thermostat']).encode())
-                    logging.debug("Published command %s", str(request))
+                    logging.debug("Pushed command %s", str(request))
     finally:
         client.loop_stop()
 
