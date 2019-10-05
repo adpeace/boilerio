@@ -91,18 +91,23 @@ class TargetOverride(object):
         self.zone = zone
 
     @classmethod
-    def from_db(cls, connection):
+    def from_db(cls, connection, zones=None):
         cursor = connection.cursor()
         cursor.execute('select until, temp, zone from override')
         data = cursor.fetchall()
         return [cls(override[0], override[1], override[2])
-                for override in data]
+                for override in data
+                if zones is None or override[2] in zones]
 
     @classmethod
-    def clear_from_db(cls, connection):
+    def clear_from_db(cls, connection, zone_id=None):
         """ Cancel any current override in database. """
         cursor = connection.cursor()
-        cursor.execute('delete from override')
+        if zone_id:
+            cursor.execute('delete from override where zone=%s',
+                           (zone_id, ))
+        else:
+            cursor.execute('delete from override')
 
     def to_dict(self):
         """Convert to a dictionary (for saving as JSON)."""

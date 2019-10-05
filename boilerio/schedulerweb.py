@@ -6,7 +6,7 @@ import datetime
 import logging
 
 from flask import Flask, jsonify, request, g
-from flask_restplus import Api, Resource, Model, fields, marshal
+from flask_restplus import Api, Resource, fields, marshal
 
 from . import model
 from .scheduler import SchedulerTemperaturePolicy
@@ -15,7 +15,9 @@ from .config import load_config
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
-api = Api(app, description="Partially migrated to restplus: some APIs are not included here.")
+api = Api(app,
+          description="Partially migrated to restplus: some APIs are not "
+                      "included here.")
 
 def get_conf():
     if not hasattr(g, 'conf'):
@@ -39,12 +41,27 @@ def close_db(error):
 
 # --------------------------------------------------------------------------
 
+a_zone = api.model('Zone', {
+    'zone_id': fields.Integer(description="ID of zone"),
+    'name': fields.String(),
+    'boiler_relay': fields.String(
+        description="Identifier of boiler relay for this zone."),
+    'seonsor': fields.String(
+        description="Identifier of sensor for this zone (MQTT path)."),
+    })
+
+an_override = api.model("Temperature target override", {
+    'zone': fields.Integer(description="Which zone it applies to"),
+    'end': fields.DateTime(description="Date/time the override ends"),
+    'temp': fields.Float(description="Target temperature during override"),
+    })
+
 a_gradient_measurement = api.model('Temperature gradient', {
     'when': fields.DateTime(description="Date/time the measurement was taken."),
     'delta': fields.Float(description="Difference between inside and "
         "outside temperature at the start of the measurement."),
     'gradient': fields.Float(description="The temperature gradient in "
-        "degrees C per hour.")
+        "degrees C per hour."),
     })
 a_gradient_average = api.model('Temperature gradient average', {
     'delta': fields.Float(description="Difference between inside and "
@@ -256,6 +273,10 @@ def full_schedule_to_dict(full_schedule):
 
     return json_schedule
 
+
+#------------------------------------------------------------------------------
+# Schedule.  This is a bit untidy/non-idiomatic.
+
 @app.route("/schedule")
 def get_schedule():
     db = get_db()
@@ -305,50 +326,79 @@ def remove_schedule_entry():
     db.commit()
     return ''
 
-@app.route("/zones")
-def list_zones():
-    db = get_db()
-    zones = model.Zone.all_from_db(db)
-    return jsonify([{
-                'zone_id': z.zone_id,
-                'name': z.name,
-                'boiler_relay': z.boiler_relay,
-                'sensor': z.sensor
-            } for z in zones
-        ])
 
-@app.route("/target_override", methods=["POST"])
-def set_target_override():
-    """Set a target override for a duration specified.
+@api.route("/zones")
+class ListZones(Resource):
+    @api.marshal_list_with(a_zone)
+    def get(self):
+        db = get_db()
+        zones = model.Zone.all_from_db(db)
+        return zones
 
-    Specify 'zone', 'temp' and at least one of 'days', 'hours', or 'mins'.
-    Returns a JSON object containg 'temp' (the newly-accepted target)
-    and 'until' which is a %H:%M-formatted time at which the override
-    ends (so the client doesn't have to do a time calculation for this).
-    """
-    try:
-        zone = int(request.form['zone'])
 
-        secs = 0
-        if 'days' in request.form:
-            secs += int(request.form['days']) * 60 * 60 * 24
-        if 'hours' in request.form:
-            secs += int(request.form['hours']) * 60 * 60
-        if 'mins' in request.form:
-            secs += int(request.form['mins']) * 60
-        if not secs:
-            return 'Must specify days, hours, or mins', 400
+@api.route("/zones/<int:zone_id>/override")
+class Override(Resource):
+    """Temperature override for a zone."""
+    @api.response(code=200, model=an_override, description="OK")
+    @api.response(code=204, description="No overrides active")
+    def get(self, zone_id):
+        """Get temperature override for zone.
 
-        duration = datetime.timedelta(0, secs)
-        temp = float(request.form['temp'])
-    except ValueError:
-        return '', 400
-    now = datetime.datetime.now()
-    end = now + duration
+        Returns no override if an override was in place but has expired."""
+        # XXX we shouldn't be deciding on the server whether an override is
+        # active since it doesn't tell us whether the device is implementing it
+        # or not.  This should move to target/reported state model.
+        now = datetime.datetime.now()
+        db = get_db()
+        overrides = model.TargetOverride.from_db(db, [zone_id])
+        if not overrides:
+            return None, 204
 
-    db = get_db()
-    override = model.TargetOverride(end, temp, zone)
-    override.save(db)
-    db.commit()
+        assert len(overrides) == 1, "Only support one override per zone"
+        override = overrides[0]
+        if override.end > now:
+            return marshal(override, an_override), 200
+        return None, 204
 
-    return ('', 200)
+    @api.doc(params={
+        "temp": { 'description': "The override temperature to set.",
+                  'type': float, 'required': True, 'in': 'formData' },
+        "days": { "type": int, "in": "formData"},
+        "hours": { "type": int, "in": "formData"},
+        "mins": { "type": int, "in": "formData"},
+    })
+    def post(self, zone_id):
+        """Configure a temperature override.
+
+        Sepcify at least one of hours, mins, secs for duration."""
+        try:
+            secs = 0
+            if 'days' in request.form:
+                secs += int(request.form['days']) * 60 * 60 * 24
+            if 'hours' in request.form:
+                secs += int(request.form['hours']) * 60 * 60
+            if 'mins' in request.form:
+                secs += int(request.form['mins']) * 60
+            if not secs:
+                return 'Must specify days, hours, or mins (%s)' % str(dict(request.form)), 400
+
+            duration = datetime.timedelta(0, secs)
+            temp = float(request.form['temp'])
+        except ValueError:
+            return '', 400
+        now = datetime.datetime.now()
+        end = now + duration
+
+        db = get_db()
+        override = model.TargetOverride(end, temp, zone_id)
+        override.save(db)
+        db.commit()
+
+        return ('', 200)
+
+    def delete(self, zone_id):
+        """Clear temperature override."""
+        db = get_db()
+        model.TargetOverride.clear_from_db(db, zone_id)
+        db.commit()
+        return '', 200

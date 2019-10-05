@@ -13,13 +13,15 @@ var weekday = {
 };
 
 /* Clear existing override */
-function clear_override() {
-    $.ajax({
-        url: 'api//target_override',
-        type: 'DELETE',
-        success: function() {
-            load_summary();
-        }});
+function clear_override(ev) {
+    var requests = ev.data.zones.map(function(zone) {
+        return $.ajax({
+            url: 'api/zones/'+ zone.zone_id + '/override',
+            type: 'DELETE',
+            async: true
+        });
+    });
+    $.when(requests).done(function() { load_summary(); });
 }
 
 /* Make UI elements for the override dialog
@@ -34,7 +36,7 @@ function mk_override(override_set_ev, zones) {
         var temp_val = $("#override_temp").val();
         var zone_val = $("#override_zone").val();
         $.post({
-            url: "api//target_override",
+            url: "api/zones/" + zone_val.toString() + '/override',
             data: {hours: hours_val, temp: temp_val, zone: zone_val},
             success: function(data) { override_set_ev(); }
         });
@@ -312,7 +314,8 @@ function renderSummary(summary) {
     if (summary.zones.some(zone => zone.target_override)) {
         override_p.append(
             $('<button class="highlight">').html('Cancel override')
-                                           .click(clear_override));
+                                           .click({"zones": summary.zones},
+                                               clear_override));
     }
     var override_click = function() {
         $("#override").show();
