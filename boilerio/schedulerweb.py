@@ -46,7 +46,7 @@ a_zone = api.model('Zone', {
     'name': fields.String(),
     'boiler_relay': fields.String(
         description="Identifier of boiler relay for this zone."),
-    'seonsor': fields.String(
+    'sensor': fields.String(
         description="Identifier of sensor for this zone (MQTT path)."),
     })
 
