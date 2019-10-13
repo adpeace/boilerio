@@ -19,8 +19,13 @@ def get_weather(apikey, city):
          'sunset': SUNSET}
     where SUNRISE and SUNSET are UNIX times in UTC.
     """
-    r = requests.get(WEATHER_API_ENDPOINT, params={
-        'q': city, 'apikey': apikey, 'units': 'metric'})
+    try:
+        r = requests.get(WEATHER_API_ENDPOINT, params={
+            'q': city, 'apikey': apikey, 'units': 'metric'})
+    except requests.exceptions.ConnectionError as e:
+        logger.error("Couldn't get weather: %s", e)
+        raise
+
     if r.status_code == 200:
         result = r.json()
         try:
