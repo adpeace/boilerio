@@ -39,13 +39,14 @@ class FullSchedule(object):
                        "values (%s, %s, %s, %s)", (dow, time, zone, temp))
 
     @classmethod
-    def delete_entry(cls, db, dow, time):
+    def delete_entry(cls, db, dow, time, zone):
         """ Remove entries for all zones at a specified day/time.
 
         dow is the day of week, counting from 0 being Monday. """
         cursor = db.cursor()
-        cursor.execute("delete from schedule where day=%s and starttime=%s",
-                       (dow, time))
+        cursor.execute("delete from schedule where day=%s and starttime=%s "
+                       "and zone=%s",
+                       (dow, time, zone))
 
     @classmethod
     def from_db(cls, db, zone_id=None):

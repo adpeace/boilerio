@@ -335,11 +335,12 @@ def remove_schedule_entry():
         time = datetime.datetime.strptime(request.values['time'], "%H:%M")
         time = time.time()
         day = int(request.values['day'])
+        zone = int(request.values['zone'])
         if not (day >= 0 and day < 7):
             raise ValueError("Day of week must be in range 0 to 7")
     except ValueError:
         return ('', 400)
-    model.FullSchedule.delete_entry(db, day, time)
+    model.FullSchedule.delete_entry(db, day, time, zone)
     db.commit()
     return ''
 
