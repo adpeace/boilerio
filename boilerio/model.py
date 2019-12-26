@@ -48,11 +48,16 @@ class FullSchedule(object):
                        (dow, time))
 
     @classmethod
-    def from_db(cls, db):
+    def from_db(cls, db, zone_id=None):
         """ Create a schedule class instance from the database. """
         cursor = db.cursor()
-        cursor.execute("select day, starttime, zone, temp from schedule "
-                       "order by day, starttime, zone")
+        if zone_id is None:
+            cursor.execute("select day, starttime, zone, temp from schedule "
+                           "order by day, starttime, zone")
+        else:
+            cursor.execute("select day, starttime, zone, temp from schedule "
+                           "where zone=%s "
+                           "order by day, starttime, zone", (zone_id,))
         entries = []
         for record in cursor:
             entries.append(record)

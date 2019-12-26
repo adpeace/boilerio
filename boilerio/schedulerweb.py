@@ -121,6 +121,23 @@ class ReportedState(Resource):
         db.commit()
         return device_state
 
+@api.route('/zones/<int:zone_id>/schedule')
+@api.param('zone_id', 'Zone ID for the schedule.')
+class ZoneSchedule(Resource):
+    def get(self, zone_id):
+        db = get_db()
+        schedule = model.FullSchedule.from_db(db, zone_id)
+        db.commit()
+
+        entries = []
+        for (dow, time, zone, temp) in schedule:
+            entries.append({
+                'day': dow,
+                'time': time.strftime('%H:%M'),
+                'temp': temp,
+            })
+        return entries
+
 # --------------------------------------------------------------------------
 
 def today_by_time_from_zones(today_by_zone):
