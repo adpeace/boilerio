@@ -215,41 +215,6 @@ def get_summary():
         }
     return jsonify(result)
 
-@app.route("/state", methods=["POST"])
-def update_cached_state():
-    """Updates the currently-cached state value.
-
-    Expects request values 'when' (datetime) and 'state'"""
-    try:
-        state = request.values['state']
-        when = datetime.datetime.strptime(
-            request.values['when'], "%Y-%m-%dT%H:%M:%S")
-    except ValueError:
-        return ('', 400)
-
-    db = get_db()
-    model.update_last_state(db, when, state)
-    db.commit()
-    return ('', 200)
-
-@app.route("/temperature", methods=["POST"])
-def update_cached_temperature():
-    """Updates the currently-cached temperature value.
-
-    Expects request values 'when' (datetime) and 'temp'"""
-    try:
-        temp = float(request.values['temp'])
-        when = datetime.datetime.strptime(
-            request.values['when'], "%Y-%m-%dT%H:%M:%S")
-        zone = int(request.values['zone'])
-    except ValueError:
-        return ('', 400)
-
-    db = get_db()
-    model.update_last_temperature(db, when, temp, zone)
-    db.commit()
-    return ('', 200)
-
 def full_schedule_to_dict(full_schedule):
     """Generate a dictionary from a schedule object for conversion to JSON.
 
@@ -336,6 +301,8 @@ def remove_schedule_entry():
     db.commit()
     return ''
 
+# --------------------------------------------------------------------------
+# Zones
 
 @api.route("/zones")
 class ListZones(Resource):

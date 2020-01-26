@@ -176,8 +176,6 @@ def test_time_to_target_returns_None_until_initialized():
         # There is no gradient table or last recorded temperature:
         assert zc.get_time_to_target() is None
 
-        # Mock post requests to the temperature cache:
-        m.post("https://scheduler/api/temperature", status_code=200)
         msg = MagicMock()
         msg.payload = '{"temperature": "15.0"}'
         msg.topic = zone.sensor
