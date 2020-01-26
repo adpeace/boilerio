@@ -215,14 +215,6 @@ def get_summary():
         }
     return jsonify(result)
 
-@app.route("/target_override", methods=["DELETE"])
-def remove_target_override():
-    """Removes the target override if in place."""
-    db = get_db()
-    model.TargetOverride.clear_from_db(db)
-    db.commit()
-    return ('', 204)
-
 @app.route("/state", methods=["POST"])
 def update_cached_state():
     """Updates the currently-cached state value.
