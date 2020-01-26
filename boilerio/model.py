@@ -171,33 +171,6 @@ class DeviceState(object):
         data = data[0]
         return cls(data[0], zone_id, data[1], data[2], data[3], data[4])
 
-class TimeToTarget(object):
-    def __init__(self, zone_id, time_to_target):
-        self.zone_id = zone_id
-        self.time_to_target = time_to_target
-
-    @classmethod
-    def from_db(cls, connection, zone_id):
-        cursor = connection.cursor()
-        cursor.execute("select zone_id, time_to_target from time_to_target "
-                "where zone_id=%s limit 1", (zone_id, ))
-        data = cursor.fetchall()
-        return cls(data[0][0], data[0][1]) if data else None
-
-    @classmethod
-    def delete(cls, connection, zone_id):
-        cursor = connection.cursor()
-        cursor.execute("delete from time_to_target where zone_id=%s",
-                (zone_id, ))
-
-    def save(self, connection):
-        cursor = connection.cursor()
-        cursor.execute('delete from time_to_target where zone_id=%s',
-                (self.zone_id,))
-        cursor.execute('insert into time_to_target '
-                '(zone_id, time_to_target) values (%s, %s)',
-                (self.zone_id, self.time_to_target))
-
 class TemperatureGradientMeasurement(object):
     """A record of a measured heating gradient."""
     def __init__(self, zone_id, when, delta, gradient):
