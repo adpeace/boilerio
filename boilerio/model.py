@@ -64,13 +64,6 @@ class FullSchedule(object):
             entries.append(record)
         return cls(entries)
 
-class TempReading(object):
-    """ Convenience class representing a temperature reading. """
-    def __init__(self, when, temp, zone_id):
-        self.when = when
-        self.temp = temp
-        self.zone_id = zone_id
-
 class Zone(object):
     """A heating zone, with relay and temperature sensor."""
     def __init__(self, zone_id, name, boiler_relay, sensor):
