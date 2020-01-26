@@ -1,19 +1,12 @@
 import datetime
 import logging
 
+from .tempsensor import TempReading
 from boilerio import pid, pwm
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-class TempReading(object):
-    def __init__(self, when, temp):
-        self.when = when
-        self.reading = temp
-
-    def __str__(self):
-        return "%f deg C at %s" % (self.reading, self.when)
 
 class TemperatureSetting(object):
     def __init__(self, target, zone_width=0.6):
@@ -46,7 +39,7 @@ class Thermostat(object):
     PID_KI = 0.3
     PID_KD = 1.8
 
-    def __init__(self, boiler, state_change_callback=None):
+    def __init__(self, boiler, sensor, state_change_callback=None):
         """Initialise thermostat object.
 
         boiler: an object with 'on' and 'off' methods"""
@@ -55,7 +48,7 @@ class Thermostat(object):
         self._pwm_control = pwm.PWM(0, self.PWM_PERIOD, boiler)
         self._state_change_callback = state_change_callback
         self._measurement_begin = None
-        self._temperature = None
+        self._sensor = sensor
         self._target = None
         self._state = None
 
@@ -87,29 +80,21 @@ class Thermostat(object):
             self._target = TemperatureSetting(target)
             self._pid.reset(target)
 
-    def update_temperature(self, temp):
-        """New temperature reading received.
-
-        temp: a TempReading object with time and temperature value in
-              celcius."""
-        logger.debug("Temperature update: %s", str(temp))
-        self._temperature = temp
-
     def interval_elapsed(self, now):
         """Act on time interval passing.
 
         now: the current datetime"""
-        if (self._temperature is None or self._target is None or
-                self._temperature.when < (now - self.STALE_PERIOD)):
+        if (self._sensor.temperature is None or self._target is None or
+                self._sensor.temperature.when < (now - self.STALE_PERIOD)):
             # Reading is stale: turn off the boiler:
             self._notify_state('Stale')
             self._boiler.off()
-        elif self._temperature.reading < self._target.target_zone_min:
+        elif self._sensor.temperature.reading < self._target.target_zone_min:
             # Reading is valid and below target range:
             self._notify_state('On')
             self._boiler.on()
-        elif (self._temperature.reading > self._target.target_zone_min and
-              self._temperature.reading <= self._target.target_zone_max):
+        elif (self._sensor.temperature.reading > self._target.target_zone_min and
+              self._sensor.temperature.reading <= self._target.target_zone_max):
             # Reading is valid and within the target range:
             # New measurement cycle?
             self._notify_state('PWM')
@@ -117,7 +102,7 @@ class Thermostat(object):
                     self._measurement_begin + self.PWM_PERIOD < now):
                 self._measurement_begin = now
                 # Adjust duty cycle:
-                pid_output = self._pid.update(self._temperature.reading)
+                pid_output = self._pid.update(self._sensor.temperature.reading)
                 self._pwm_control.setDutyCycle(pid_output)
 
                 logger.debug("PID output: %f", pid_output)
@@ -126,7 +111,7 @@ class Thermostat(object):
                              self._pid.last_diff)
                 logger.debug("New measurement cycle started")
             self._pwm_control.update(now)
-        elif self._temperature.reading > self._target.target_zone_max:
+        elif self._sensor.temperature.reading > self._target.target_zone_max:
             # Reading is valid and above the target range:
             self._notify_state('Off')
             self._boiler.off()

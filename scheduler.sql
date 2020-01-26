@@ -28,9 +28,74 @@ CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
 COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
 
 
+--
+-- Name: sensor_metric_type; Type: TYPE; Schema: public; Owner: postgres
+--
+
+CREATE TYPE public.sensor_metric_type AS ENUM (
+    'temperature',
+    'battery_voltage',
+    'humidity'
+);
+
+
+ALTER TYPE public.sensor_metric_type OWNER TO postgres;
+
 SET default_tablespace = '';
 
 SET default_with_oids = false;
+
+--
+-- Name: device_reported_state; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.device_reported_state (
+    zone_id integer NOT NULL,
+    received timestamp without time zone,
+    state character varying(20),
+    target double precision,
+    current_temp double precision,
+    time_to_target integer
+);
+
+
+ALTER TABLE public.device_reported_state OWNER TO postgres;
+
+--
+-- Name: gradient_measurement; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.gradient_measurement (
+    id integer NOT NULL,
+    "when" timestamp without time zone,
+    delta double precision,
+    gradient double precision,
+    zone integer NOT NULL
+);
+
+
+ALTER TABLE public.gradient_measurement OWNER TO postgres;
+
+--
+-- Name: gradient_measurement_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.gradient_measurement_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.gradient_measurement_id_seq OWNER TO postgres;
+
+--
+-- Name: gradient_measurement_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.gradient_measurement_id_seq OWNED BY public.gradient_measurement.id;
+
 
 --
 -- Name: override; Type: TABLE; Schema: public; Owner: postgres
@@ -61,29 +126,52 @@ CREATE TABLE public.schedule (
 ALTER TABLE public.schedule OWNER TO postgres;
 
 --
--- Name: state_cache; Type: TABLE; Schema: public; Owner: postgres
+-- Name: sensor; Type: TABLE; Schema: public; Owner: postgres
 --
 
-CREATE TABLE public.state_cache (
-    state character varying(10),
-    updated timestamp without time zone
+CREATE TABLE public.sensor (
+    sensor_id integer NOT NULL,
+    locator character varying(100),
+    name character varying(100)
 );
 
 
-ALTER TABLE public.state_cache OWNER TO postgres;
+ALTER TABLE public.sensor OWNER TO postgres;
 
 --
--- Name: temperature_cache; Type: TABLE; Schema: public; Owner: postgres
+-- Name: sensor_reading; Type: TABLE; Schema: public; Owner: postgres
 --
 
-CREATE TABLE public.temperature_cache (
-    temperature double precision,
-    updated timestamp without time zone,
-    zone integer
+CREATE TABLE public.sensor_reading (
+    sensor_id integer NOT NULL,
+    metric_type public.sensor_metric_type NOT NULL,
+    "time" timestamp without time zone NOT NULL,
+    value double precision
 );
 
 
-ALTER TABLE public.temperature_cache OWNER TO postgres;
+ALTER TABLE public.sensor_reading OWNER TO postgres;
+
+--
+-- Name: sensor_sensor_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.sensor_sensor_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.sensor_sensor_id_seq OWNER TO postgres;
+
+--
+-- Name: sensor_sensor_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.sensor_sensor_id_seq OWNED BY public.sensor.sensor_id;
+
 
 --
 -- Name: zones; Type: TABLE; Schema: public; Owner: postgres
@@ -93,7 +181,7 @@ CREATE TABLE public.zones (
     zone_id integer NOT NULL,
     name character varying(30),
     boiler_relay character varying(50) NOT NULL,
-    sensor character varying(50) NOT NULL
+    sensor_id integer
 );
 
 
@@ -121,10 +209,40 @@ ALTER SEQUENCE public.zones_zone_id_seq OWNED BY public.zones.zone_id;
 
 
 --
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.gradient_measurement ALTER COLUMN id SET DEFAULT nextval('public.gradient_measurement_id_seq'::regclass);
+
+
+--
+-- Name: sensor_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.sensor ALTER COLUMN sensor_id SET DEFAULT nextval('public.sensor_sensor_id_seq'::regclass);
+
+
+--
 -- Name: zone_id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.zones ALTER COLUMN zone_id SET DEFAULT nextval('public.zones_zone_id_seq'::regclass);
+
+
+--
+-- Name: device_reported_state_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.device_reported_state
+    ADD CONSTRAINT device_reported_state_pkey PRIMARY KEY (zone_id);
+
+
+--
+-- Name: gradient_measurement_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.gradient_measurement
+    ADD CONSTRAINT gradient_measurement_pkey PRIMARY KEY (id);
 
 
 --
@@ -144,6 +262,22 @@ ALTER TABLE ONLY public.schedule
 
 
 --
+-- Name: sensor_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.sensor
+    ADD CONSTRAINT sensor_pkey PRIMARY KEY (sensor_id);
+
+
+--
+-- Name: sensor_reading_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.sensor_reading
+    ADD CONSTRAINT sensor_reading_pkey PRIMARY KEY (sensor_id, metric_type, "time");
+
+
+--
 -- Name: zones_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -152,11 +286,42 @@ ALTER TABLE ONLY public.zones
 
 
 --
--- Name: zone_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: sensor_reading_sensor_time; Type: INDEX; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY public.temperature_cache
-    ADD CONSTRAINT zone_fkey FOREIGN KEY (zone) REFERENCES public.zones(zone_id);
+CREATE INDEX sensor_reading_sensor_time ON public.sensor_reading USING btree (sensor_id, "time");
+
+
+--
+-- Name: fkey_zone; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.gradient_measurement
+    ADD CONSTRAINT fkey_zone FOREIGN KEY (zone) REFERENCES public.zones(zone_id);
+
+
+--
+-- Name: fkey_zone_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.device_reported_state
+    ADD CONSTRAINT fkey_zone_id FOREIGN KEY (zone_id) REFERENCES public.zones(zone_id);
+
+
+--
+-- Name: sensor_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.zones
+    ADD CONSTRAINT sensor_fkey FOREIGN KEY (sensor_id) REFERENCES public.sensor(sensor_id);
+
+
+--
+-- Name: sensor_reading_sensor_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.sensor_reading
+    ADD CONSTRAINT sensor_reading_sensor_id_fkey FOREIGN KEY (sensor_id) REFERENCES public.sensor(sensor_id);
 
 
 --
@@ -186,6 +351,36 @@ GRANT ALL ON SCHEMA public TO PUBLIC;
 
 
 --
+-- Name: TABLE device_reported_state; Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON TABLE public.device_reported_state FROM PUBLIC;
+REVOKE ALL ON TABLE public.device_reported_state FROM postgres;
+GRANT ALL ON TABLE public.device_reported_state TO postgres;
+GRANT ALL ON TABLE public.device_reported_state TO scheduler;
+
+
+--
+-- Name: TABLE gradient_measurement; Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON TABLE public.gradient_measurement FROM PUBLIC;
+REVOKE ALL ON TABLE public.gradient_measurement FROM postgres;
+GRANT ALL ON TABLE public.gradient_measurement TO postgres;
+GRANT ALL ON TABLE public.gradient_measurement TO scheduler;
+
+
+--
+-- Name: SEQUENCE gradient_measurement_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON SEQUENCE public.gradient_measurement_id_seq FROM PUBLIC;
+REVOKE ALL ON SEQUENCE public.gradient_measurement_id_seq FROM postgres;
+GRANT ALL ON SEQUENCE public.gradient_measurement_id_seq TO postgres;
+GRANT ALL ON SEQUENCE public.gradient_measurement_id_seq TO scheduler;
+
+
+--
 -- Name: TABLE override; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -206,23 +401,23 @@ GRANT ALL ON TABLE public.schedule TO scheduler;
 
 
 --
--- Name: TABLE state_cache; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE sensor; Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON TABLE public.state_cache FROM PUBLIC;
-REVOKE ALL ON TABLE public.state_cache FROM postgres;
-GRANT ALL ON TABLE public.state_cache TO postgres;
-GRANT ALL ON TABLE public.state_cache TO scheduler;
+REVOKE ALL ON TABLE public.sensor FROM PUBLIC;
+REVOKE ALL ON TABLE public.sensor FROM postgres;
+GRANT ALL ON TABLE public.sensor TO postgres;
+GRANT ALL ON TABLE public.sensor TO scheduler;
 
 
 --
--- Name: TABLE temperature_cache; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE sensor_reading; Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON TABLE public.temperature_cache FROM PUBLIC;
-REVOKE ALL ON TABLE public.temperature_cache FROM postgres;
-GRANT ALL ON TABLE public.temperature_cache TO postgres;
-GRANT ALL ON TABLE public.temperature_cache TO scheduler;
+REVOKE ALL ON TABLE public.sensor_reading FROM PUBLIC;
+REVOKE ALL ON TABLE public.sensor_reading FROM postgres;
+GRANT ALL ON TABLE public.sensor_reading TO postgres;
+GRANT ALL ON TABLE public.sensor_reading TO scheduler;
 
 
 --

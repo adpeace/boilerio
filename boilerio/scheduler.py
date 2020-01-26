@@ -18,6 +18,8 @@ from requests.auth import HTTPBasicAuth
 from . import model
 from . import config
 from . import thermostat
+from . import tempsensor
+from . import update_sensor
 from . import weather
 
 logging.basicConfig()
@@ -162,8 +164,8 @@ def mqtt_on_connect(client, userdata, flags, rc):
     if rc:
         logger.error("Error connecting, rc %d", rc)
         return
-    for zone in userdata['zones']:
-        client.subscribe(zone.sensor)
+    for sensor in userdata['sensors'].values():
+        client.subscribe(sensor.locator)
     client.subscribe(userdata['thermostat_schedule_change_topic'])
 
 def mqtt_on_message(client, userdata, msg):
@@ -172,14 +174,14 @@ def mqtt_on_message(client, userdata, msg):
 
 class ZoneController(object):
     """Connect a schedule, thermostat, and temperature sensor."""
-    def __init__(self, mqttc, zone, boiler, thermostat_obj, scheduler_url,
+    def __init__(self, zone, boiler, sensor, thermostat_obj, scheduler_url,
                  auth, weather,
                  gradient_table_update_frequency=timedelta(hours=1)):
         self.zone = zone
         self.boiler = boiler
         self.thermostat = thermostat_obj
         self.thermostat.set_state_change_callback(self.thermostat_state_callback)
-        self.last_temp = None
+        self._sensor = sensor
         self.scheduler_url = scheduler_url
         self.scheduler_auth = auth
 
@@ -190,38 +192,20 @@ class ZoneController(object):
                 'current_temp': None,
                 }
         self.do_update_state = True
-
+        self._sensor.add_callback(self.temperature_change)
         self.gradient_table = []
         self.last_gradient_table_update = None
         self.gradient_table_update_frequency = gradient_table_update_frequency
         self.weather = weather
 
-        mqttc.message_callback_add(zone.sensor, self.temp_callback)
-
     def thermostat_state_callback(self, new_state):
         self.reported_state['state'] = new_state
         self.do_update_state = True
 
-    def temp_callback(self, client, userdata, msg):
-        try:
-            if self.zone.sensor != msg.topic:
-                return
-
-            data = json.loads(msg.payload)
-            temp = float(data['temperature'])
-            if self.last_temp and temp == self.last_temp.reading:
-                return
-
-            now = datetime.datetime.now()
-            self.last_temp = temp_reading = thermostat.TempReading(now, temp)
-            self.reported_state['current_temp'] = temp
-            self.do_update_state = True
-
-            # Update the thermostat:
-            self.thermostat.update_temperature(temp_reading)
-        except Exception as e:
-            logger.critical("Exception escaped from MQTT handler ZoneController for zone %s.",
-                    str(self.zone), exc_info=True)
+    def temperature_change(self, sensor):
+        # Temperature changed: record in our state.
+        self.reported_state['current_temp'] = sensor.temperature.reading
+        self.do_update_state = True
 
     def get_time_to_target(self):
         """Estimate time to reach temperature target.
@@ -232,26 +216,28 @@ class ZoneController(object):
         # integral over time.
 
         # If we're not heating, just return nothing:
-        if (self.thermostat.state != 'On' or self.last_temp is None or
-                self.thermostat.target < self.last_temp.reading):
+        if (self.thermostat.state != 'On' or
+            self._sensor.temperature is None or
+            self.thermostat.target < self._sensor.temperature.reading):
             return None
         else:
             outside = self.weather.get_weather()
-            delta_t = self.last_temp.reading - outside['temperature']
+            delta_t = self._sensor.temperature.reading - outside['temperature']
 
             # Find a gradient where the delta between inside and out was
             # closest to the current temperature:
             match = None
             for gradient in self.gradient_table:
-                if match is None or (
-                        abs(gradient['delta'] - delta_t)
+                if match is None:
+                    match = gradient
+                elif (abs(gradient['delta'] - delta_t)
                         < abs(match['delta'] - delta_t)):
                     match = gradient
 
             # Now use it to estimate heating time:
             if match is None:
                 return None
-            amount_to_heat = self.thermostat.target - self.last_temp.reading
+            amount_to_heat = self.thermostat.target - self._sensor.temperature.reading
             return timedelta(hours=(amount_to_heat / match['gradient']))
 
     def report_updated_state(self):
@@ -299,41 +285,64 @@ class ZoneController(object):
         if self.do_update_state:
             self.report_updated_state()
 
-def load_zone_info(scheduler_url, auth):
-    """Load zone information from service.
+def get_url_with_fallback(fallback, url, auth):
+    """Gets a URL and updates fallback file.
 
-    Try to get zone information.  Cache it to disk under /var/lib/boilerio
-    in case we can't get it next time.  Get it from the cached location if
-    the HTTP request fails and it is present, otherwise fail (since we don't
-    know what zones are present).
-    """
-    BOILERIO_ZONE_BACKUP_FILE = '/var/lib/boilerio/zones'
-
-    zones = None
+    Uses fallback file if get request fails.  Returns None if no sources
+    are available."""
 
     # First try to get from web service:
-    r = requests.get(scheduler_url + '/zones', auth=auth)
+    result = None
+
+    r = requests.get(url, auth=auth)
     if r.status_code == 200:
         try:
-            with open(BOILERIO_ZONE_BACKUP_FILE, 'w') as f:
+            with open(fallback, 'w') as f:
                 f.write(r.text)
         except:
             logger.warn("Unable to write backup zone file.")
-        zones = json.loads(r.text)
+        result = r.text
     else:
         # That failed, try to get from last backup:
-        logger.error("Couldn't retrieve zone information from web servive.")
-        if os.path.exists(BOILERIO_ZONE_BACKUP_FILE):
+        logger.error("Couldn't retrieve %s from web servive, "
+                     "attempting fallback.", url)
+        if os.path.exists(fallback):
             try:
-                with open(BOILERIO_ZONE_BACKUP_FILE, 'r') as f:
-                    zones = json.loads(f.read())
+                with open(fallback, 'r') as f:
+                    result = f.read()
             except:
                 logger.error("Couldn't retrive zones from backup.")
 
-    if zones is not None:
-        return [model.Zone(z['zone_id'], z['name'], z['boiler_relay'], z['sensor'])
-                for z in zones]
-    raise ZoneInfoUnavailable()
+    return result
+
+def load_zone_info(scheduler_url, auth):
+    """Load zone information from service. """
+    BOILERIO_ZONE_BACKUP_FILE = '/var/lib/boilerio/zones'
+
+    zones = json.loads(get_url_with_fallback(BOILERIO_ZONE_BACKUP_FILE,
+                                             scheduler_url + '/zones', auth))
+    if zones is None:
+        raise ZoneInfoUnavailable()
+
+    return [model.Zone(z['zone_id'], z['name'], z['boiler_relay'], z['sensor_id'])
+            for z in zones]
+
+def construct_sensors(scheduler_url, auth):
+    """Construct sensors from service.
+
+    Return a diction of sensor_id -> EmonTHSensor object"""
+    SENSOR_BACKUP_FILE = '/var/lib/boilerio/sensors'
+
+    sensors = json.loads(get_url_with_fallback(SENSOR_BACKUP_FILE,
+                                               scheduler_url + '/sensor', auth))
+    if sensors is None:
+        raise ZoneInfoUnavailable()
+
+    return {
+        s['sensor_id']: tempsensor.EmonTHSensor(s['sensor_id'], s['locator'])
+        for s in sensors
+    }
+
 
 class AllZoneController(object):
     """Controller for multiple zones.
@@ -392,6 +401,7 @@ def main():
     else:
         scheduler_url = conf.get('heating', 'scheduler_url')
 
+    sensors = construct_sensors(scheduler_url, auth)
     zones = load_zone_info(scheduler_url, auth)
 
     period_event = threading.Event()
@@ -402,7 +412,7 @@ def main():
         'timer_event': period_event,
         'scheduler_url': scheduler_url,
         'auth': auth,
-        'zones': zones,
+        'sensors': sensors,
         })
     mqttc.username_pw_set(conf.get('mqtt', 'user'),
                           conf.get('mqtt', 'password'))
@@ -410,14 +420,23 @@ def main():
     mqttc.on_message = mqtt_on_message
     mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
 
+    sensor_updater = update_sensor.TempSensorUpdater(scheduler_url, auth)
+
     zone_controllers = []
     weather_obj = weather.CachingWeather(conf.get('weather', 'apikey'),
             conf.get('weather', 'location'))
+
+    for sensor in sensors.values():
+        sensor.register_mqtt_callbacks(mqttc)
+        sensor_updater.add_sensor(sensor)
+
     for zone in zones:
         zone_boiler = MqttBoiler(zone.boiler_relay, mqttc,
                                  conf.get('heating', 'demand_request_topic'))
-        zone_thermostat = thermostat.Thermostat(zone_boiler)
-        zone_controller = ZoneController(mqttc, zone, zone_boiler, zone_thermostat,
+        zone_sensor = sensors[zone.sensor_id]
+        zone_thermostat = thermostat.Thermostat(zone_boiler, zone_sensor)
+        zone_controller = ZoneController(zone, zone_boiler, zone_sensor,
+                                         zone_thermostat,
                                          scheduler_url, auth, weather_obj)
         zone_controllers.append(zone_controller)
 

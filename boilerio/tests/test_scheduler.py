@@ -162,24 +162,27 @@ def test_time_to_target_returns_None_until_initialized():
         mqttc = MagicMock()
         boiler = MagicMock()
         zone = MagicMock()
-        thermostat_obj = MagicMock()
+        sensor = MagicMock()
+        thermostat = MagicMock()
         weather = MagicMock()
         weather.get_weather.return_value = {'temperature': 5}
 
-        thermostat_obj.target = 20
-        thermostat_obj.state = 'On'
-        zone.sensor = 'sensor' # needs to match msg.topic below
+        thermostat.target = 20
+        thermostat.state = 'On'
+        sensor.temperature = None
 
-        zc = scheduler.ZoneController(mqttc, zone, boiler, thermostat_obj,
-            'https://scheduler/api', None, weather)
+        zc = scheduler.ZoneController(zone, boiler, sensor,
+                                      thermostat,
+                                      'https://scheduler/api', None,
+                                      weather)
 
         # There is no gradient table or last recorded temperature:
         assert zc.get_time_to_target() is None
 
-        msg = MagicMock()
-        msg.payload = '{"temperature": "15.0"}'
-        msg.topic = zone.sensor
-        zc.temp_callback(None, None, msg)
+        sensor.temperature = MagicMock()
+        sensor.temperature.reading = 15.0
+        sensor.temperature.when = datetime.now()
+        zc.temperature_change(sensor)
 
         # Still no gradient table: should return None:
         assert zc.get_time_to_target() is None

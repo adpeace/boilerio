@@ -66,16 +66,16 @@ class FullSchedule(object):
 
 class Zone(object):
     """A heating zone, with relay and temperature sensor."""
-    def __init__(self, zone_id, name, boiler_relay, sensor):
+    def __init__(self, zone_id, name, boiler_relay, sensor_id):
         self.zone_id = zone_id
         self.name = name
         self.boiler_relay = boiler_relay
-        self.sensor = sensor
+        self.sensor_id = sensor_id
 
     @classmethod
     def all_from_db(cls, connection):
         cursor = connection.cursor()
-        cursor.execute("select zone_id, name, boiler_relay, sensor from zones")
+        cursor.execute("select zone_id, name, boiler_relay, sensor_id from zones")
         zones = []
         for record in cursor:
             zone = Zone(record[0], record[1], record[2], record[3])
@@ -163,6 +163,64 @@ class DeviceState(object):
             return None
         data = data[0]
         return cls(data[0], zone_id, data[1], data[2], data[3], data[4])
+
+
+class SensorReading(object):
+    """Represents a single sensor reading.
+
+    metric_type is one of 'temperature', 'humidity', 'battery_voltage'.
+    """
+    def __init__(self, sensor_id, when, metric_type, value):
+        self.sensor_id = sensor_id
+        self.when = when
+        self.metric_type = metric_type
+        self.value = value
+
+    def save(self, connection):
+        cursor = connection.cursor()
+        cursor.execute("insert into sensor_reading "
+                       "(sensor_id, metric_type, time, value) VALUES "
+                       "(%s,%s,%s,%s)", (self.sensor_id, self.metric_type,
+                                         self.when, self.value))
+
+
+class Sensor(object):
+    """A sensor, currently sensor."""
+    def __init__(self, sensor_id, name, locator):
+        self.sensor_id = sensor_id
+        self.name = name
+        self.locator = locator
+
+    @classmethod
+    def all_from_db(cls, connection):
+        cursor = connection.cursor()
+        cursor.execute("select sensor_id, name, locator from sensor")
+        data = cursor.fetchall()
+        return [cls(r[0], r[1], r[2]) for r in data]
+
+    @classmethod
+    def from_db(cls, connection, sensor_id):
+        cursor = connection.cursor()
+        cursor.execute("select name, locator from sensor "
+                       "where sensor_id=%s", (sensor_id, ))
+        data = cursor.fetchone()
+        if not data:
+            raise ValueError("No sensor found (%s)" % sensor_id)
+        data = data[0]
+        return cls(sensor_id, data[0], data[1])
+
+    def get_last_readings(self, connection):
+        """ Returns a list of the sensor's last readings.
+
+        Includes one reading per metric_type published.
+        """
+        cursor = connection.cursor()
+        cursor.execute("select metric_type, time, value from sensor_reading "
+                       "where sensor_id=%s "
+                       "order by time desc limit 1", (self.sensor_id, ))
+        return [SensorReading(self.sensor_id, record[1], record[0], record[2])
+                for record in cursor]
+
 
 class TemperatureGradientMeasurement(object):
     """A record of a measured heating gradient."""
