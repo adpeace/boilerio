@@ -11,7 +11,7 @@ except Exception as error:
     long_description = None
 
 setup(name='boilerio',
-      version='0.0.3',
+      version='0.0.4',
       description='A software thermostat and heating control system',
       url='https://github.com/adpeace/boilerio.git',
       author='Andy Peace',
@@ -26,9 +26,10 @@ setup(name='boilerio',
       scripts=['bin/boiler_to_mqtt', 'bin/boilersim'],
       entry_points={'console_scripts': [
         'scheduler=boilerio.scheduler:main',
-        'maintaintemp=boilerio.maintaintemp:main',
         ]},
       setup_requires=['pytest-runner'],
-      install_requires=['Flask', 'requests', 'psycopg2-binary', 'paho-mqtt', 'flask_restplus', 'pyserial'],
+      install_requires=[
+          'Flask', 'requests', 'psycopg2-binary', 'paho-mqtt',
+          'flask_restplus', 'pyserial'],
       tests_require=['pytest', 'requests-mock', 'mock'],
       zip_safe=False)
