@@ -10,12 +10,14 @@ from boilerio import config
 
 logging.basicConfig(level=logging.DEBUG)
 
+
 def on_connect(client, userdata, flags, rc):
     if rc:
         logging.error("Error connecting, rc %d", rc)
         return
     logging.info("Subscribing to %s", userdata['demand_topic'])
     client.subscribe(userdata['demand_topic'])
+
 
 def on_message(client, userdata, msg):
     if msg.topic != userdata['demand_topic']:
@@ -24,7 +26,7 @@ def on_message(client, userdata, msg):
     try:
         request = json.loads(msg.payload)
         request['thermostat'] = hex(int(request['thermostat'], 0))
-    except:
+    except ValueError:
         logging.error("Error parsing request")
         return
 
@@ -35,6 +37,7 @@ def on_message(client, userdata, msg):
         logging.error("Invalid or no thermostat ID specified")
     userdata['command_queue'].append(request)
     logging.debug("Queued command %s", str(request))
+
 
 def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
          sensor_filename):
@@ -57,8 +60,7 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
         sensor_filename = sys.argv[1]
         # Note that the timeout of 0.5s allows time between commands being
         # sent/received
-        with serial.Serial(sensor_filename, 57600, timeout=0.5) as \
-             sensor_file:
+        with serial.Serial(sensor_filename, 57600, timeout=0.5) as sensor_file:
             data = ""
             while True:
                 data = data + sensor_file.readline().decode('utf-8')
@@ -66,26 +68,35 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
                 # Was a full message received?  If so, process it, otherwise
                 # keep it until next time.
                 if data.endswith('\n'):
-                    data = data.strip()
                     try:
-                        direction, tid, cmd = data.split()
-                    except:
-                        logging.error("Couldn't parse input: {}".format(data))
+                        data = data.strip()
+                        if data == "Danfoss thermostat transceiver":
+                            logging.info("Device welcome banner received: "
+                                         "Operating normally")
+                            continue
+                        try:
+                            direction, tid, cmd = data.split()
+                            if direction not in ['ISSUE', 'RECV']:
+                                raise ValueError("Unknown direction {}".format(
+                                    direction))
+                            if cmd not in ['ON', 'OFF', 'LEARN']:
+                                raise ValueError("Unknown command {}".format(
+                                    cmd))
+                        except ValueError:
+                            logging.error("Couldn't parse input: {}".format(
+                                data))
+                            continue
+                        msg = {
+                            'thermostat': tid,
+                            'direction': direction,
+                            'cmd': cmd
+                        }
+                        logging.info("Publishing update to {}/{} : {}".format(
+                            zone_basetopic, tid, json.dumps(msg)))
+                        client.publish("{}/{}".format(zone_basetopic, tid),
+                                       json.dumps(msg))
+                    finally:
                         data = ""
-                        continue
-                    if direction not in ['ISSUE', 'RECV'] or \
-                       cmd not in ['ON', 'OFF', 'LEARN']:
-                        logging.error("Couldn't parse input: {}".format(data))
-                        data = ""
-                        continue
-                    msg = {'thermostat': tid,
-                           'direction': direction,
-                           'cmd': cmd}
-                    logging.info("Publishing update to {}/{} : {}".format(
-                        zone_basetopic, tid, json.dumps(msg)))
-                    client.publish("{}/{}".format(zone_basetopic, tid),
-                                   json.dumps(msg))
-                    data = ""
                 elif not data:
                     # Nothing was received; send a command from the queue
                     try:
@@ -98,6 +109,7 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
                     logging.debug("Pushed command %s", str(request))
     finally:
         client.loop_stop()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
