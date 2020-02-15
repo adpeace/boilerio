@@ -22,7 +22,9 @@ need to be configured:
 1.  The local scheduler and boiler interface.
 1.  The sensor inputs
 
-You can install from the repository, or simply using `pip` by running:
+You can install from the repository to get a specific version, such as the
+latest development version not yet published to PyPI, or install via `pip` from
+PyPI for a recent tested version by running:
 
 ```
 pip install boilerio
@@ -33,11 +35,43 @@ To install from the git repository, first check it out then install using `pip`:
 ```
 $ git clone https://github.com/adpeace/boilerio.git
 $ cd boilerio
-$ pip install .
+$ pip3 install .
 ```
 
 Use `-e` to `pip` to install in development mode (i.e. just link to the
 checked-out source instead of installing it).
+
+### Raspberry Pi Quickstart to get MQTT-based on/off control working
+
+You can run these steps on a Raspberry Pi with a fresh SD card that has the Buster version of Raspbian.  You can ssh to the Raspberry Pi, then copy/paste these commands into the terminal.  You'll need a transceiver device such as a JeeLink with the `thermostat` firmware (available at https://github.com/adpeace/thermostat) plugged in to use this.
+
+```
+sudo apt install -y python3-pip git
+git clone https://github.com/adpeace/boilerio.git
+cd boilerio
+sudo pip3 install --upgrade pip  # good practise but not mandatory
+sudo pip3 install .
+sudo mkdir /etc/sensors
+sudo bash -c 'cat >/etc/sensors/config' <<EOF
+[mqtt]
+host = mqtt_hostname
+user = mqtt_username
+password = mqtt_password
+
+[heating]
+info_basetopic = heating/zone/info
+demand_request_topic = heating/zone/demand
+EOF
+```
+
+Now use a text editor such as `nano` to edit `/etc/sensors/config` and replace
+the MQTT server details with your own.
+
+Now run `boiler_to_mqtt /dev/ttyUSB0` (replacing `/dev/ttyUSB0` with the location
+of the Danfoss transceiver device, e.g. your JeeLink; JeeLink will probably show
+up at that device name though if you don't have other USB devices connected).
+
+### The web app
 
 To run the scheduler flask application for development, using `flask run`:
 
