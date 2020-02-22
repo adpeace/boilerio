@@ -40,6 +40,9 @@ class EmonTHSensor(object):
                 return
 
             data = json.loads(msg.payload)
+            if 'temperature' not in data:
+                return
+
             temp = float(data['temperature'])
             if self.temperature and temp == self.temperature.reading:
                 return
