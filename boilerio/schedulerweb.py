@@ -130,7 +130,7 @@ class ZoneSchedule(Resource):
         db.commit()
 
         entries = []
-        for (dow, time, zone, temp) in schedule:
+        for (dow, time, _, temp) in schedule:
             entries.append({
                 'day': dow,
                 'time': time.strftime('%H:%M'),
@@ -153,7 +153,7 @@ def today_by_time_from_zones(today_by_zone):
     # going for something more readable here.
     for zone in today_by_zone:
         for tbz_entry in today_by_zone[zone]:
-            tbz_when, tbz_zone, tbz_temp = tbz_entry
+            tbz_when, _, tbz_temp = tbz_entry
             inserted = False
             for tbt_entry in today_by_time:
                 if tbt_entry['when'] == tbz_when:
