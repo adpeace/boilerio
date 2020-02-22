@@ -124,6 +124,7 @@ class TargetOverride(object):
                        'values (%s, %s, %s)',
                        (self.end, self.temp, self.zone))
 
+
 class DeviceState(object):
     """The state reported by a device.
 
@@ -144,8 +145,6 @@ class DeviceState(object):
 
     def save(self, connection):
         cursor = connection.cursor()
-        cursor.execute('delete from device_reported_state where zone_id=%s',
-                (self.zone_id,))
         cursor.execute('insert into device_reported_state '
                 '(zone_id, received, state, target, current_temp, '
                 'time_to_target) values (%s, %s, %s, %s, %s, %s)',
@@ -153,11 +152,11 @@ class DeviceState(object):
                     self.current_temp, self.time_to_target))
 
     @classmethod
-    def from_db(cls, connection, zone_id):
+    def last_from_db(cls, connection, zone_id):
         cursor = connection.cursor()
         cursor.execute('select received, state, target, current_temp, '
                 'time_to_target from device_reported_state '
-                'where zone_id=%s limit 1', (zone_id,))
+                'where zone_id=%s order by received desc limit 1', (zone_id,))
         data = cursor.fetchall()
         if not data:
             return None

@@ -117,7 +117,7 @@ class ReportedState(Resource):
     @api.marshal_with(a_device_state)
     def get(self, zone_id):
         db = get_db()
-        device_state = model.DeviceState.from_db(db, zone_id)
+        device_state = model.DeviceState.last_from_db(db, zone_id)
         db.commit()
         return device_state
 
@@ -190,7 +190,7 @@ def get_summary():
         zid = zone['zone_id']
 
         zone['target'] = scheduler.target(now, zid)
-        reported_state = model.DeviceState.from_db(db, zid)
+        reported_state = model.DeviceState.last_from_db(db, zid)
         zone['reported_state'] = marshal(reported_state, a_device_state)
 
         # We may have a stale override so check that the target is actually

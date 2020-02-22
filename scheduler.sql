@@ -51,7 +51,7 @@ SET default_with_oids = false;
 
 CREATE TABLE public.device_reported_state (
     zone_id integer NOT NULL,
-    received timestamp without time zone,
+    received timestamp without time zone NOT NULL,
     state character varying(20),
     target double precision,
     current_temp double precision,
@@ -234,7 +234,7 @@ ALTER TABLE ONLY public.zones ALTER COLUMN zone_id SET DEFAULT nextval('public.z
 --
 
 ALTER TABLE ONLY public.device_reported_state
-    ADD CONSTRAINT device_reported_state_pkey PRIMARY KEY (zone_id);
+    ADD CONSTRAINT device_reported_state_pkey PRIMARY KEY (zone_id, received);
 
 
 --
