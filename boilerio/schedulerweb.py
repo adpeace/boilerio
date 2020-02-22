@@ -98,6 +98,11 @@ a_device_state = api.model('Device reported state', {
     'target': fields.Float(description="Target the device is working towards."),
     'current_temp': fields.Float(description='Current temperature '
         'reported by the device.'),
+    'target_overridden': fields.Boolean(descripton="Whether the target "
+        "temperature has been overridden"),
+    "current_outside_temp": fields.Float(description="Current outside temperature reported"
+        "by the device."),
+    "dutycycle": fields.Float(description="Dutycycle for boiler"),
     })
 
 @api.route('/zones/<int:zone_id>/reported_state')
@@ -109,8 +114,8 @@ class ReportedState(Resource):
         device_state = model.DeviceState(
                 datetime.datetime.now(),
                 zone_id, api.payload['state'], api.payload['target'],
-                api.payload['current_temp'],
-                api.payload['time_to_target'])
+                api.payload['current_temp'], api.payload['time_to_target'],
+                api.payload['current_outside_temp'], api.payload['dutycycle'])
         device_state.save(db)
         db.commit()
 

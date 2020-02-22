@@ -130,38 +130,48 @@ class DeviceState(object):
 
     Includes:
      - 'received' - the date/time in UTC the device report was received.
-     - 'zone_id' - zone ID for the device
-     - 'target' - the target temperature the device is using
-     - 'current_temp' - the temperature the device currently sees.
-     - 'time_to_target' - time to a new target (or null)
+     - 'zone_id' - zone ID for the device.
+     - 'target' - the target temperature the device is using.
+     - 'current_temp' - the temperature the device currently sees (or None).
+     - 'current_outside_temp' - the temperature the device currently sees for outside.
+                                (or None).
+     - 'time_to_target' - time to a new target (or None).
+     - 'dutycycle' - floating point value between 0 and 1.
     """
-    def __init__(self, received, zone_id, state, target, current_temp, time_to_target):
+    def __init__(self, received, zone_id, state, target, current_temp, time_to_target,
+                 current_outside_temp, dutycycle):
         self.received = received
         self.zone_id = zone_id
         self.state = state
         self.target = target
         self.current_temp = current_temp
+        self.current_outside_temp = current_outside_temp
         self.time_to_target = time_to_target
+        self.dutycycle = dutycycle
 
     def save(self, connection):
         cursor = connection.cursor()
         cursor.execute('insert into device_reported_state '
                 '(zone_id, received, state, target, current_temp, '
-                'time_to_target) values (%s, %s, %s, %s, %s, %s)',
-                (self.zone_id, self.received, self.state, self.target,
-                    self.current_temp, self.time_to_target))
+                'time_to_target, current_outside_temp, dutycycle) '
+                'values (%s, %s, %s, %s, %s, %s, %s, %s)', (
+                    self.zone_id, self.received, self.state, self.target,
+                    self.current_temp, self.time_to_target,
+                    self.current_outside_temp, self.dutycycle,
+                ))
 
     @classmethod
     def last_from_db(cls, connection, zone_id):
         cursor = connection.cursor()
         cursor.execute('select received, state, target, current_temp, '
-                'time_to_target from device_reported_state '
+                'time_to_target, current_outside_temp, dutycycle '
+                'from device_reported_state '
                 'where zone_id=%s order by received desc limit 1', (zone_id,))
         data = cursor.fetchall()
         if not data:
             return None
         data = data[0]
-        return cls(data[0], zone_id, data[1], data[2], data[3], data[4])
+        return cls(data[0], zone_id, *data[1:])
 
 
 class SensorReading(object):

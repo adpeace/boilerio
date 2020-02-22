@@ -4,6 +4,7 @@
 from mock import Mock, MagicMock
 from datetime import time, datetime, timedelta
 from boilerio import model, scheduler
+import mock
 import requests_mock
 import requests.exceptions
 
@@ -168,7 +169,7 @@ def test_time_to_target_returns_None_until_initialized():
         weather.get_weather.return_value = {'temperature': 5}
 
         thermostat.target = 20
-        thermostat.state = 'On'
+        thermostat.is_heating = True
         sensor.temperature = None
 
         zc = scheduler.ZoneController(zone, boiler, sensor,

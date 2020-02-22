@@ -55,7 +55,10 @@ CREATE TABLE public.device_reported_state (
     state character varying(20),
     target double precision,
     current_temp double precision,
-    time_to_target integer
+    time_to_target integer,
+    current_outside_temp double precision,
+    target_overridden boolean,
+    dutycycle double precision
 );
 
 

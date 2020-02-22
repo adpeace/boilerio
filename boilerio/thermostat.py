@@ -26,9 +26,8 @@ class TemperatureSetting(object):
         return self._target + self._zone_width / 2
 
 class Thermostat(object):
-    """Represents a thermostat.
+    """A thermostat: turns boiler on/off based on temperature input."""
 
-    Manage a boiler given a termpature input."""
     STALE_PERIOD = datetime.timedelta(0, 600)
 
     # The period of one on-off cycle when maintaining/monitoring the average
@@ -38,6 +37,11 @@ class Thermostat(object):
     PID_KP = 2.8
     PID_KI = 0.3
     PID_KD = 1.8
+
+    MODE_ON = "On"
+    MODE_PWM = "PWM"
+    MODE_OFF = "Off"
+    MODE_STALE = "Stale"
 
     def __init__(self, boiler, sensor, state_change_callback=None):
         """Initialise thermostat object.
@@ -50,15 +54,18 @@ class Thermostat(object):
         self._measurement_begin = None
         self._sensor = sensor
         self._target = None
-        self._state = None
+        self._state = {'mode': self.MODE_STALE, 'dutycycle': 0}
 
-    def _notify_state(self, new_state):
-        if new_state != self._state:
-            logger.debug("%s: State transition %s -> %s", str(self),
-                         self._state, new_state)
-            self._state = new_state
+    def _update_state(self, mode, dutycycle):
+        """Updates local state and notifies observers if there was a change."""
+        # Using word 'mode' here to avoid confusion
+        state = {'mode': mode, 'dutycycle': dutycycle}
+        if state != self._state:
+            logger.debug("%s: State change: %s -> %s",
+                         str(self), self._state, state)
+            self._state = state
             if self._state_change_callback is not None:
-                self._state_change_callback(self._state)
+                self._state_change_callback(state['mode'], state['dutycycle'])
 
     def set_state_change_callback(self, state_change_callback):
         self._state_change_callback = state_change_callback
@@ -68,8 +75,9 @@ class Thermostat(object):
         return self._target.target if self._target else None
 
     @property
-    def state(self):
-        return self._state
+    def is_heating(self):
+        """True when we're heating up to a temperature (not maintaining/off)."""
+        return self._state['mode'] == self.MODE_ON
 
     def set_target_temperature(self, target):
         """Set a target temperature.
@@ -87,17 +95,16 @@ class Thermostat(object):
         if (self._sensor.temperature is None or self._target is None or
                 self._sensor.temperature.when < (now - self.STALE_PERIOD)):
             # Reading is stale: turn off the boiler:
-            self._notify_state('Stale')
+            self._update_state(self.MODE_STALE, 0)
             self._boiler.off()
         elif self._sensor.temperature.reading < self._target.target_zone_min:
             # Reading is valid and below target range:
-            self._notify_state('On')
+            self._update_state(self.MODE_ON, 1)
             self._boiler.on()
         elif (self._sensor.temperature.reading > self._target.target_zone_min and
               self._sensor.temperature.reading <= self._target.target_zone_max):
             # Reading is valid and within the target range:
             # New measurement cycle?
-            self._notify_state('PWM')
             if (self._measurement_begin is None or
                     self._measurement_begin + self.PWM_PERIOD < now):
                 self._measurement_begin = now
@@ -110,8 +117,10 @@ class Thermostat(object):
                              self._pid.last_prop, self._pid.error_integral,
                              self._pid.last_diff)
                 logger.debug("New measurement cycle started")
+
+            self._update_state(self.MODE_PWM, self._pwm_control.dutycycle)
             self._pwm_control.update(now)
         elif self._sensor.temperature.reading > self._target.target_zone_max:
             # Reading is valid and above the target range:
-            self._notify_state('Off')
+            self._update_state(self.MODE_OFF, 0)
             self._boiler.off()
