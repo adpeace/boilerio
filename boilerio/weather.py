@@ -69,7 +69,7 @@ class CachingWeather(Weather):
         """Fetch weather from cache (if not timed out) or online."""
         now = now_fn()
         if (self._last_result is None or self._last_updated is None or
-                self._last_updated + self._cache_time < now):
+            self._last_updated + self._cache_time < now):
             try:
                 self._last_result = super(CachingWeather, self).get_weather()
                 self._last_updated = now
