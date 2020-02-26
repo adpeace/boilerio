@@ -1,4 +1,8 @@
 *.pyc
 .*
+*.egg-info
+build
+dist
+venv
 htmlcov
 __pycache__
