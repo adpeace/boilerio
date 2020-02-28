@@ -14,9 +14,6 @@ class PID(object):
         self.min_output = 0.15
         self.reset(setpoint)
 
-    def setLastValue(self, val):
-        self.last_pv = val
-
     def reset(self, setpoint):
         self.setpoint = setpoint
         self.last_diff = 0
