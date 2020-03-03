@@ -5,23 +5,37 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 class PID(object):
-    def __init__(self, setpoint, Kp, Ki, Kd):
+    """PID controller.
+
+    Designed for single-direction applications, i.e. a motor that spins in one
+    direction with varying power.
+    """
+
+    def __init__(self, setpoint, Kp, Ki, Kd, min_output=0.15):
+        """Initialize PID controller.
+
+        min_output defines the lowest value the output can take, beyond which
+        it will get dropped to 0.  The controller is output is constrained at a
+        maximum of 1."""
         self.Kp = Kp
         self.Ki = Ki
         self.Kd = Kd
-        self.last_prop = 0
+        self.last_prop = 0.0
         self.last_pv = None
-        self.min_output = 0.15
+        self.min_output = min_output
         self.reset(setpoint)
 
     def reset(self, setpoint):
+        """Change setpoint.
+
+        This also resets internal tracking of error and differentials.
+        """
         self.setpoint = setpoint
         self.last_diff = 0
         self.error_integral = 0
 
     def update(self, pv):
-        if self.setpoint is None:
-            return 0
+        """Update with a new present value.  Returns PID output."""
         if self.last_pv is None:
             self.last_pv = pv
 
@@ -40,7 +54,7 @@ class PID(object):
         if out < self.min_output:
             rv = 0
         else:
-            rv = max(min(out, 1), self.min_output)
+            rv = min(out, 1)
         logger.debug("Unconstrained pid return value %f -> %f", out, rv)
 
         return rv

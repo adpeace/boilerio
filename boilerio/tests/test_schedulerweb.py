@@ -1,6 +1,7 @@
-import boilerio.model as model
-import boilerio.schedulerweb as schedulerweb
 from datetime import time
+
+from .. import model
+from .. import schedulerweb
 
 def test_today_pivot_merge_entries():
     # zoneid -> [ (start, zoneid, temp) ]:
