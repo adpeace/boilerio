@@ -2,15 +2,18 @@
 
 import psycopg2
 
+
 def db_connect(host, db, user, pw):
     """ Connect to database
 
-    Returns a postgres database connection created using the provided credentials.
+    Returns a postgres database connection created using the provided
+    credentials.
     """
     connect_string = 'host={} dbname={} user={} password={}'.format(
         host, db, user, pw)
     conn = psycopg2.connect(connect_string)
     return conn
+
 
 class FullSchedule(object):
     """ The heating schedule. """
@@ -64,6 +67,7 @@ class FullSchedule(object):
             entries.append(record)
         return cls(entries)
 
+
 class Zone(object):
     """A heating zone, with relay and temperature sensor."""
     def __init__(self, zone_id, name, boiler_relay, sensor_id):
@@ -75,12 +79,14 @@ class Zone(object):
     @classmethod
     def all_from_db(cls, connection):
         cursor = connection.cursor()
-        cursor.execute("select zone_id, name, boiler_relay, sensor_id from zones")
+        cursor.execute("select zone_id, name, boiler_relay, sensor_id "
+                       "from zones")
         zones = []
         for record in cursor:
             zone = Zone(record[0], record[1], record[2], record[3])
             zones.append(zone)
         return zones
+
 
 class TargetOverride(object):
     """ Override the set temperature for a period of time. """
@@ -133,13 +139,13 @@ class DeviceState(object):
      - 'zone_id' - zone ID for the device.
      - 'target' - the target temperature the device is using.
      - 'current_temp' - the temperature the device currently sees (or None).
-     - 'current_outside_temp' - the temperature the device currently sees for outside.
-                                (or None).
+     - 'current_outside_temp' - the temperature the device currently sees for
+                                outside (or None).
      - 'time_to_target' - time to a new target (or None).
      - 'dutycycle' - floating point value between 0 and 1.
     """
-    def __init__(self, received, zone_id, state, target, current_temp, time_to_target,
-                 current_outside_temp, dutycycle):
+    def __init__(self, received, zone_id, state, target, current_temp,
+                 time_to_target, current_outside_temp, dutycycle):
         self.received = received
         self.zone_id = zone_id
         self.state = state
@@ -151,22 +157,25 @@ class DeviceState(object):
 
     def save(self, connection):
         cursor = connection.cursor()
-        cursor.execute('insert into device_reported_state '
-                '(zone_id, received, state, target, current_temp, '
-                'time_to_target, current_outside_temp, dutycycle) '
-                'values (%s, %s, %s, %s, %s, %s, %s, %s)', (
-                    self.zone_id, self.received, self.state, self.target,
-                    self.current_temp, self.time_to_target,
-                    self.current_outside_temp, self.dutycycle,
-                ))
+        cursor.execute(
+            'insert into device_reported_state '
+            '(zone_id, received, state, target, current_temp, '
+            'time_to_target, current_outside_temp, dutycycle) '
+            'values (%s, %s, %s, %s, %s, %s, %s, %s)', (
+                self.zone_id, self.received, self.state, self.target,
+                self.current_temp, self.time_to_target,
+                self.current_outside_temp, self.dutycycle,
+            ))
 
     @classmethod
     def last_from_db(cls, connection, zone_id):
         cursor = connection.cursor()
-        cursor.execute('select received, state, target, current_temp, '
-                'time_to_target, current_outside_temp, dutycycle '
-                'from device_reported_state '
-                'where zone_id=%s order by received desc limit 1', (zone_id,))
+        cursor.execute(
+            'select received, state, target, current_temp, '
+            'time_to_target, current_outside_temp, dutycycle '
+            'from device_reported_state '
+            'where zone_id=%s order by received desc limit 1', (zone_id,)
+            )
         data = cursor.fetchall()
         if not data:
             return None
@@ -242,10 +251,12 @@ class TemperatureGradientMeasurement(object):
     def save(self, connection):
         """Write gradient to database."""
         cursor = connection.cursor()
-        cursor.execute('insert into gradient_measurement '
-                '(zone, "when", delta, gradient) values '
-                '(%s, %s, %s, %s)',
-                (self.zone_id, self.when, self.delta, self.gradient))
+        cursor.execute(
+            'insert into gradient_measurement '
+            '(zone, "when", delta, gradient) values '
+            '(%s, %s, %s, %s)',
+            (self.zone_id, self.when, self.delta, self.gradient)
+            )
 
     @staticmethod
     def get_gradient_table(connection, zone_id):
@@ -255,10 +266,12 @@ class TemperatureGradientMeasurement(object):
             [ (delta rounded to nearest 0.5, average gradient) ]
         """
         cursor = connection.cursor()
-        cursor.execute("select round(2 * cast(delta as numeric), 0) / 2 as d, "
-                "avg(gradient), count(gradient) "
-                "from gradient_measurement where zone=%s"
-                "group by d order by d", (zone_id,))
+        cursor.execute(
+            "select round(2 * cast(delta as numeric), 0) / 2 as d, "
+            "avg(gradient), count(gradient) "
+            "from gradient_measurement where zone=%s"
+            "group by d order by d", (zone_id,)
+            )
         return [{
             'delta': record[0],
             'gradient': record[1],
