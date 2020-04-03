@@ -79,8 +79,7 @@ class Override(Resource):
             if 'mins' in request.form:
                 secs += int(request.form['mins']) * 60
             if not secs:
-                return ('Must specify days, hours, or mins ' %
-                        '(%s)' % str(dict(request.form)), 400)
+                return 'Must specify days, hours, or mins', 400
 
             duration = datetime.timedelta(0, secs)
             temp = float(request.form['temp'])
