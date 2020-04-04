@@ -3,7 +3,8 @@
 
 from mock import Mock, MagicMock
 from datetime import time, datetime, timedelta
-from boilerio import model, scheduler
+from .. import scheduler
+from ..schedulerweb import model
 import mock
 import requests_mock
 import requests.exceptions

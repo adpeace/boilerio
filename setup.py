@@ -1,5 +1,5 @@
 import subprocess
-from setuptools import setup
+from setuptools import setup, find_packages
 
 # Try to create an rst long_description from README.md:
 try:
@@ -22,7 +22,7 @@ setup(name='boilerio',
         'Development Status :: 2 - Pre-Alpha',
         'License :: OSI Approved :: MIT License',
         ],
-      packages=['boilerio'],
+      packages=find_packages(),
       scripts=['bin/boiler_to_mqtt', 'bin/boilersim'],
       entry_points={'console_scripts': [
         'scheduler=boilerio.scheduler:main',

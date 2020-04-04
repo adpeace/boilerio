@@ -3,7 +3,7 @@ from flask_restx import Namespace, Resource, fields, marshal
 from flask import request
 
 from . import model
-from .schedulerweb_util import get_db
+from .util import get_db
 
 
 api = Namespace('Zones', title="Zone management")

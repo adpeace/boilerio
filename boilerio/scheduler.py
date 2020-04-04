@@ -15,7 +15,7 @@ import requests
 import requests.exceptions
 from requests.auth import HTTPBasicAuth
 
-from . import model
+from .schedulerweb import model # XXX
 from . import config
 from . import thermostat
 from . import tempsensor

@@ -12,10 +12,11 @@ from flask_login import LoginManager, current_user
 import basicauth
 
 from . import model
-from . import schedulerweb_zones
-from .scheduler import SchedulerTemperaturePolicy
-from .schedulerweb_util import get_conf, get_db
-from . import schedulerweb_auth
+from . import auth
+from .zones import a_device_state, api as zones_api
+from .util import get_conf, get_db
+
+from ..scheduler import SchedulerTemperaturePolicy
 
 
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +25,7 @@ app = Flask(__name__)
 api = Api(title="BoilerIO Heating Control",
           description="Partially migrated to restplus: some APIs are not "
                       "included here.")
-api.add_namespace(schedulerweb_zones.api, path='/zones')
+api.add_namespace(zones_api, path='/zones')
 api.init_app(app)
 login_manager = LoginManager(app=app)
 
@@ -77,9 +78,9 @@ def load_user_from_request(request):
     except ValueError:
         return None
 
-    hashed_password = schedulerweb_auth.hash_password(password, endpoint.salt)
+    hashed_password = auth.hash_password(password, endpoint.salt)
     if hashed_password.decode() == endpoint.device_secret_hashed:
-        return schedulerweb_auth.Device()
+        return auth.Device()
     return None
 
 
@@ -136,7 +137,7 @@ def get_summary():
 
         zone['target'] = scheduler.target(now, zid)
         reported_state = model.DeviceState.last_from_db(db, zid)
-        zone['reported_state'] = marshal(reported_state, schedulerweb_zones.a_device_state)
+        zone['reported_state'] = marshal(reported_state, a_device_state)
 
         # We may have a stale override so check that the target is actually
         # being overriden:

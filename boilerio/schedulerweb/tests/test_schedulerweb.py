@@ -1,7 +1,7 @@
 from datetime import time
 
 from .. import model
-from .. import schedulerweb
+from .. import app
 
 def test_today_pivot_merge_entries():
     # zoneid -> [ (start, zoneid, temp) ]:
@@ -26,7 +26,7 @@ def test_today_pivot_merge_entries():
                             {'zone': 2, 'temp': 17}
                             ]},
                       ]
-    assert schedulerweb.today_by_time_from_zones(data) == expected_result
+    assert app.today_by_time_from_zones(data) == expected_result
 
 def test_get_schedule_simple():
     entries = [
@@ -37,7 +37,7 @@ def test_get_schedule_simple():
         1: [], 2: [], 3: [], 4: [], 5: [], 6: [],
         }
     fullsched = model.FullSchedule(entries)
-    assert schedulerweb.full_schedule_to_dict(fullsched) == expected_result
+    assert app.full_schedule_to_dict(fullsched) == expected_result
 
 def test_get_schedule_simultaneous_change():
     entries = [
@@ -49,4 +49,4 @@ def test_get_schedule_simultaneous_change():
         1: [], 2: [], 3: [], 4: [], 5: [], 6: [],
         }
     fullsched = model.FullSchedule(entries)
-    assert schedulerweb.full_schedule_to_dict(fullsched) == expected_result
+    assert app.full_schedule_to_dict(fullsched) == expected_result

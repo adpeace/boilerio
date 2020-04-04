@@ -3,6 +3,8 @@ import base64
 from flask_login import UserMixin
 from hashlib import scrypt
 
+from . import model
+
 
 # ---------------------------------------------------------------------
 # Device authentication
