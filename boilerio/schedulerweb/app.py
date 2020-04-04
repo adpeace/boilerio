@@ -14,6 +14,7 @@ import basicauth
 from . import model
 from . import auth
 from .zones import a_device_state, api as zones_api
+from .sensors import api as sensors_api
 from .util import get_conf, get_db
 
 from ..scheduler import SchedulerTemperaturePolicy
@@ -26,6 +27,7 @@ api = Api(title="BoilerIO Heating Control",
           description="Partially migrated to restplus: some APIs are not "
                       "included here.")
 api.add_namespace(zones_api, path='/zones')
+api.add_namespace(sensors_api, path='/sensor')
 api.init_app(app)
 login_manager = LoginManager(app=app)
 
@@ -246,57 +248,3 @@ def remove_schedule_entry():
     model.FullSchedule.delete_entry(db, day, time, zone)
     db.commit()
     return ''
-
-
-# --------------------------------------------------------------------------
-# Sensors
-
-a_sensor = api.model("Sensor", {
-    'sensor_id': fields.Integer(description="Sensor ID"),
-    'name': fields.String(description="Friendly name of sensor"),
-    'locator': fields.String(
-        description="How to find readings for the sensor locally.  This will "
-        "be an MQTT topic to subscribe to.")
-})
-
-
-@api.route('/sensor')
-class Sensors(Resource):
-    """Set of known sensors."""
-    @api.marshal_list_with(a_sensor)
-    def get(self):
-        db = get_db()
-        return model.Sensor.all_from_db(db)
-
-
-a_sensor_reading = api.model("Sensor reading", {
-    'metric_type': fields.String(description="Metric type: "
-                                 " temperature, humidity, or battery_voltage"),
-    'when': fields.DateTime(description="When the reading occurred"),
-    'value': fields.Float(description="The reading"),
-})
-
-
-@api.route('/sensor/<int:sensor_id>/readings')
-class SensorReadings(Resource):
-    @api.marshal_list_with(a_sensor_reading)
-    def get(self, sensor_id):
-        db = get_db()
-        try:
-            sensor = model.Sensor.from_db(db, sensor_id)
-        except ValueError:
-            return '', 404
-
-        return sensor.get_last_readings(db)
-
-    @api.expect(a_sensor_reading)
-    def post(self, sensor_id):
-        reading = model.SensorReading(
-            int(sensor_id),
-            datetime.datetime.strptime(api.payload['when'], '%Y-%m-%dT%H:%M:%S.%fZ'),
-            api.payload['metric_type'],
-            float(api.payload['value'])
-            )
-        db = get_db()
-        reading.save(db)
-        db.commit()
