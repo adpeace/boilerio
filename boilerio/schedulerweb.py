@@ -7,11 +7,15 @@ import logging
 
 from flask import Flask, jsonify, request, g
 from flask_restx import Api, Resource, fields, marshal
+from flask_login import LoginManager, current_user
+
+import basicauth
 
 from . import model
 from . import schedulerweb_zones
 from .scheduler import SchedulerTemperaturePolicy
 from .schedulerweb_util import get_conf, get_db
+from . import schedulerweb_auth
 
 
 logging.basicConfig(level=logging.INFO)
@@ -22,11 +26,62 @@ api = Api(title="BoilerIO Heating Control",
                       "included here.")
 api.add_namespace(schedulerweb_zones.api, path='/zones')
 api.init_app(app)
+login_manager = LoginManager(app=app)
+
 
 @app.teardown_appcontext
 def close_db(error):
     if hasattr(g, 'db'):
         g.db.close()
+
+
+# --------------------------------------------------------------------------
+# Authorization
+
+# Make login_required the default:
+@app.before_request
+def before_request():
+    endpoint = app.view_functions.get(request.endpoint, None)
+    if endpoint is None:
+        # Authorized to view the 404
+        return
+    if current_user.is_authenticated:
+        # Authorized:
+        return
+    # Not found:
+    return login_manager.unauthorized()
+
+
+@login_manager.request_loader
+def load_user_from_request(request):
+    """Authorize devices using HTTP basic auth."""
+    auth_header = request.headers.get("Authorization")
+    if auth_header is None:
+        return None
+
+    try:
+        username, password = basicauth.decode(auth_header)
+    except basicauth.DecodeError:
+        return None
+
+    # Usernames for devices are device IDs: integers
+    try:
+        username = int(username)
+    except ValueError:
+        return None
+
+    # Check the username/password provided:
+    db = get_db()
+    try:
+        endpoint = model.EndpointIdentity.get_device_by_id(db, username)
+    except ValueError:
+        return None
+
+    hashed_password = schedulerweb_auth.hash_password(password, endpoint.salt)
+    if hashed_password.decode() == endpoint.device_secret_hashed:
+        return schedulerweb_auth.Device()
+    return None
+
 
 # --------------------------------------------------------------------------
 

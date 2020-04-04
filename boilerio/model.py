@@ -1,6 +1,7 @@
 """ Interface to scheduler database. """
 
 import psycopg2
+import base64
 
 
 def db_connect(host, db, user, pw):
@@ -277,3 +278,32 @@ class TemperatureGradientMeasurement(object):
             'gradient': record[1],
             'npoints': record[2]
             } for record in cursor]
+
+
+class EndpointIdentity(object):
+    """Authentication information stored for endpoints in a home.
+
+    Valid crednetials authorize their user to access the API.
+    """
+
+    def __init__(self, device_id, device_secret_hashed, salt):
+        self.device_id = device_id
+        self.device_secret_hashed = device_secret_hashed
+        self.salt = salt
+
+    @classmethod
+    def get_device_by_id(cls, connection, device_id):
+        """Returns a device object given a device identifier.
+
+        This includes the hashed secret and salt for that device."""
+        cursor = connection.cursor()
+        cursor.execute(
+            "select device_id, device_secret_hashed, salt "
+            "from device where device_id=%s", (device_id,)
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("Device not found")
+        else:
+            device_id, device_secret_hashed, salt = cursor.fetchone()
+            salt = base64.b64decode(salt)
+            return cls(device_id, device_secret_hashed, salt)

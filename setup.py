@@ -30,6 +30,6 @@ setup(name='boilerio',
       setup_requires=['pytest-runner'],
       install_requires=[
           'Flask', 'requests', 'psycopg2-binary', 'paho-mqtt',
-          'flask_restx', 'pyserial'],
+          'flask_restx', 'pyserial', 'flask-login', 'basicauth'],
       tests_require=['pytest', 'requests-mock', 'mock'],
       zip_safe=False)

@@ -46,6 +46,33 @@ SET default_tablespace = '';
 SET default_with_oids = false;
 
 --
+-- Name: device; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.device (
+    device_id integer NOT NULL,
+    device_secret_hashed character varying(256) NOT NULL,
+    salt character varying(64) NOT NULL
+);
+
+
+ALTER TABLE public.device OWNER TO postgres;
+
+--
+-- Name: device_device_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.device ALTER COLUMN device_id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.device_device_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: device_reported_state; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -351,6 +378,13 @@ REVOKE ALL ON SCHEMA public FROM PUBLIC;
 REVOKE ALL ON SCHEMA public FROM postgres;
 GRANT ALL ON SCHEMA public TO postgres;
 GRANT ALL ON SCHEMA public TO PUBLIC;
+
+
+--
+-- Name: TABLE device; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.device TO scheduler;
 
 
 --
