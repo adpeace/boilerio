@@ -151,5 +151,5 @@ def test_no_schedule_returns_no_target():
 
 def test_scheduler_from_json_empty_schedule():
     """Check policy creation from JSON with empty schedule."""
-    schedule = scheduler.SchedulerTemperaturePolicy.from_json(
+    scheduler.SchedulerTemperaturePolicy.from_json(
         EMPTY_SCHEDULE_RESPONSE)
