@@ -2,8 +2,8 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 10.12 (Ubuntu 10.12-0ubuntu0.18.04.1)
--- Dumped by pg_dump version 10.12 (Ubuntu 10.12-0ubuntu0.18.04.1)
+-- Dumped from database version 10.19 (Ubuntu 10.19-0ubuntu0.18.04.1)
+-- Dumped by pg_dump version 10.19 (Ubuntu 10.19-0ubuntu0.18.04.1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -46,6 +46,17 @@ ALTER TYPE public.sensor_metric_type OWNER TO postgres;
 SET default_tablespace = '';
 
 SET default_with_oids = false;
+
+--
+-- Name: clientsecrets; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.clientsecrets (
+    secret character varying(128) NOT NULL
+);
+
+
+ALTER TABLE public.clientsecrets OWNER TO postgres;
 
 --
 -- Name: device; Type: TABLE; Schema: public; Owner: postgres
@@ -306,6 +317,14 @@ ALTER TABLE ONLY public.zones ALTER COLUMN zone_id SET DEFAULT nextval('public.z
 
 
 --
+-- Name: clientsecrets clientsecrets_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.clientsecrets
+    ADD CONSTRAINT clientsecrets_pkey PRIMARY KEY (secret);
+
+
+--
 -- Name: device_reported_state device_reported_state_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -425,20 +444,17 @@ ALTER TABLE ONLY public.override
 
 
 --
+-- Name: TABLE clientsecrets; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.clientsecrets TO scheduler;
+
+
+--
 -- Name: TABLE device; Type: ACL; Schema: public; Owner: postgres
 --
 
 GRANT ALL ON TABLE public.device TO scheduler;
-
-
---
--- Name: SCHEMA public; Type: ACL; Schema: -; Owner: postgres
---
-
-REVOKE ALL ON SCHEMA public FROM PUBLIC;
-REVOKE ALL ON SCHEMA public FROM postgres;
-GRANT ALL ON SCHEMA public TO postgres;
-GRANT ALL ON SCHEMA public TO PUBLIC;
 
 
 --

@@ -119,21 +119,46 @@ class Me(Resource):
 
     @api.param(
         'id_token', 'A JWT from the Google Sign-In SDK to be validated',
-        _in='formData')
+        _in='formData'
+    )
+    @api.param(
+        'access_token', 'An access token to use on the Google userinfo endpoint',
+        _in='formData'
+    )
     @api.response(200, 'Success', a_user)
     @api.response(403, "Unauthorized")
     @csrf_protection
     def post(self):
-        # Validate the identity
+        access_token = request.form.get('access_token')
         id_token = request.form.get('id_token')
-        if id_token is None:
-            return "No ID token provided", HTTPStatus.FORBIDDEN
-
-        try:
-            identity = google_token.validate_id_token(
-                id_token, current_app.config['GOOGLE_CLIENT_ID'])
-        except ValueError:
-            return 'Invalid credentials', HTTPStatus.FORBIDDEN
+        if access_token is not None:
+            # Using an access token should be restricted to known clients,
+            # because it doesn't prevent injection of a token from
+            # authentication for a different purpose.  E.g. a malicious user
+            # could steal an access token exposed by another application and
+            # inject it here to authenticate against this application.
+            # However, this is the only way to support e.g. Alexa Account
+            # Linking since that does not provide ID tokens.
+            #
+            # Therefore, we require a client secret to be present and
+            # correct to identify the client as well as the user in this
+            # case.
+            db = get_db()
+            client_secret = request.form.get("client_secret")
+            if not (client_secret and model.client_secret_is_valid(db, client_secret)):
+                return 'Valid client secret required to use access token.', HTTPStatus.FORBIDDEN
+            try:
+                identity = google_token.get_idinfo_from_access_token(access_token)
+            except ValueError:
+                return 'Invalid credentials', HTTPStatus.FORBIDDEN
+        elif id_token is not None:
+            try:
+                identity = google_token.validate_id_token(
+                    id_token, current_app.config['GOOGLE_CLIENT_ID'])
+            except ValueError:
+                return 'Invalid credentials', HTTPStatus.FORBIDDEN
+        else:
+            return "No credentials provided", HTTPStatus.FORBIDDEN
 
         # Get the user info out of the validated identity
         if ('sub' not in identity or

@@ -309,6 +309,12 @@ class EndpointIdentity(object):
             return cls(device_id, device_secret_hashed, salt)
 
 
+def client_secret_is_valid(db, secret):
+    cursor = db.cursor()
+    cursor.execute('select * from clientsecrets where secret=%s', (secret,))
+    return cursor.rowcount == 1
+
+
 class UserIdentity:
     def __init__(self, user_id, google_subscriber_id, name, email, picture):
         self.user_id = user_id
@@ -329,7 +335,7 @@ class UserIdentity:
         )
         # Check 1 user updated
         if cursor.rowcount != 1:
-            raise ValueError("Failed to update 1 user (%d)" % r.rowcount)
+            raise ValueError("Failed to update 1 user (%d)" % cursor.rowcount)
 
     @classmethod
     def lookup_user_by_google_id(cls, db, google_subscriber_id):

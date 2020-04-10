@@ -9,7 +9,9 @@ TEST_CLIENT_ID = 'test_client_id'
 
 FAKE_NAME = "Test User"
 FAKE_EMAIL = "test@test_account.com"
-FAKE_ID_TOKEN = "wibble"
+FAKE_ACCESS_TOKEN = 'wibble_accesstoken'
+FAKE_ID_TOKEN = "wibble_idtoken"
+FAKE_CLIENT_SECRET = 'wibble_client_secret'
 FAKE_USER_ID = "1"
 FAKE_PICTURE = "https://lh3.googleusercontent.com/image"
 FAKE_SUB = "1"
@@ -83,7 +85,7 @@ def test_google_validation_affects_auth_decision(client):
         assert rv.status_code == HTTPStatus.OK
 
 
-def test_login_and_logout(client):
+def test_login_and_logout_with_idtoken(client):
     def always_accept_token(idt, request, client_id):
         assert idt == FAKE_ID_TOKEN
         return FAKE_ID_INFO
@@ -113,6 +115,49 @@ def test_login_and_logout(client):
         rv = client.get('/me')
         assert rv.status_code == HTTPStatus.NOT_FOUND
         assert FAKE_NAME.encode() not in rv.data
+
+
+@patch(__name__ + '.app.model.client_secret_is_valid')
+@patch(__name__ + '.app.get_db')
+@patch(__name__ + '.app.google_token.get_idinfo_from_access_token')
+def test_login_with_bad_access_token_rejected(idinfo_from_accesstoken, get_db, client_secret_is_valid, client):
+    # Given
+    idinfo_from_accesstoken.side_effect = ValueError
+    get_db.return_value = None
+    client_secret_is_valid.return_value = True
+
+    # When
+    rv = client.post('/me', data={
+            'access_token': FAKE_ACCESS_TOKEN,
+            'client_secret': FAKE_CLIENT_SECRET
+        }, headers={'X-Requested-With': 'test'})
+
+    # Then
+    assert rv.status_code == HTTPStatus.FORBIDDEN
+    idinfo_from_accesstoken.assert_called()
+    client_secret_is_valid.assert_called()
+
+
+@patch(__name__ + '.app.model.client_secret_is_valid')
+@patch(__name__ + '.app.get_db')
+@patch(__name__ + '.app.google_token.get_idinfo_from_access_token')
+def test_login_with_bad_client_secret_and_good_access_token_is_rejected(
+        idinfo_from_accesstoken, get_db, client_secret_is_valid, client):
+    # Given
+    idinfo_from_accesstoken.return_value = FAKE_ID_INFO
+    get_db.return_value = None
+    client_secret_is_valid.return_value = False
+
+    # When
+    rv = client.post('/me', data={
+            'access_token': FAKE_ACCESS_TOKEN,
+            'client_secret': FAKE_CLIENT_SECRET
+        }, headers={'X-Requested-With': 'test'})
+
+    # Then
+    assert rv.status_code == HTTPStatus.FORBIDDEN
+    client_secret_is_valid.assert_called()
+    idinfo_from_accesstoken.assert_not_called()
 
 
 def test_incomplete_id_token_fails_login(client):
