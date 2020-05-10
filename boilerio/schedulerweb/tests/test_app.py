@@ -72,12 +72,12 @@ def test_google_validation_affects_auth_decision(client):
     app.user_manager = FakeUserManager()
     with patch(__name__ + '.app.google_token.id_token.verify_oauth2_token',
                never_accept_token):
-        rv = client.post('/me', data={'id_token': FAKE_ID_TOKEN})
+        rv = client.post('/me', data={'id_token': FAKE_ID_TOKEN}, headers={'X-Requested-With': 'test'})
         assert rv.status_code == HTTPStatus.FORBIDDEN
 
     with patch(__name__ + '.app.google_token.id_token.verify_oauth2_token',
                always_accept_token):
-        rv = client.post('/me', data={'id_token': FAKE_ID_TOKEN})
+        rv = client.post('/me', data={'id_token': FAKE_ID_TOKEN}, headers={'X-Requested-With': 'test'})
         assert rv.status_code == HTTPStatus.OK
 
 
@@ -95,7 +95,7 @@ def test_login_and_logout(client):
         assert rv.status_code == HTTPStatus.NOT_FOUND
 
         # Log in with a "valid" token:
-        rv = client.post('/me', data={'id_token': FAKE_ID_TOKEN})
+        rv = client.post('/me', data={'id_token': FAKE_ID_TOKEN}, headers={'X-Requested-With': 'test'})
         assert rv.status_code == HTTPStatus.OK
 
         # Retrieve user info and check it's what we expect

@@ -3,7 +3,7 @@ from flask_restx import Namespace, Resource, fields, marshal
 from flask import request
 
 from . import model
-from .util import get_db
+from .util import get_db, csrf_protection
 
 
 api = Namespace('Zones', title="Zone management")
@@ -66,6 +66,7 @@ class Override(Resource):
         "hours": {"type": int, "in": "formData"},
         "mins": {"type": int, "in": "formData"},
     })
+    @csrf_protection
     def post(self, zone_id):
         """Configure a temperature override.
 
@@ -95,6 +96,7 @@ class Override(Resource):
 
         return ('', 200)
 
+    @csrf_protection
     def delete(self, zone_id):
         """Clear temperature override."""
         db = get_db()
@@ -128,6 +130,7 @@ a_gradient_average = api.model('Temperature gradient average', {
 @api.route('/<int:zone_id>/gradient_measurements')
 class Gradient(Resource):
     @api.expect(a_gradient_measurement)
+    @csrf_protection
     def post(self, zone_id):
         tgm = model.TemperatureGradientMeasurement(
                 zone_id, api.payload['when'], api.payload['delta'],

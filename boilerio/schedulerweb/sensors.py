@@ -2,7 +2,7 @@ import datetime
 from flask_restx import Namespace, Resource, fields
 
 from . import model
-from .util import get_db
+from .util import get_db, csrf_protection
 
 api = Namespace('Sensors', title="Sensor readings and management")
 
@@ -46,6 +46,7 @@ class SensorReadings(Resource):
         return sensor.get_last_readings(db)
 
     @api.expect(a_sensor_reading)
+    @csrf_protection
     def post(self, sensor_id):
         reading = model.SensorReading(
             int(sensor_id),

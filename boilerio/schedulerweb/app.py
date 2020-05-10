@@ -15,7 +15,7 @@ import basicauth
 from . import model, auth, google_token
 from .zones import a_device_state, api as zones_api
 from .sensors import api as sensors_api
-from .util import get_db
+from .util import get_db, csrf_protection
 
 from ..scheduler import SchedulerTemperaturePolicy
 
@@ -126,6 +126,7 @@ class Me(Resource):
         _in='formData')
     @api.response(200, 'Success', a_user)
     @api.response(403, "Unauthorized")
+    @csrf_protection
     def post(self):
         # Validate the identity
         id_token = request.form.get('id_token')
