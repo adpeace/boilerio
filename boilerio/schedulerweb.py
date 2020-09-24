@@ -6,7 +6,7 @@ import datetime
 import logging
 
 from flask import Flask, jsonify, request, g
-from flask_restplus import Api, Resource, fields, marshal
+from flask_restx import Api, Resource, fields, marshal
 
 from . import model
 from . import schedulerweb_zones

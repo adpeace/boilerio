@@ -1,5 +1,5 @@
 import datetime
-from flask_restplus import Namespace, Resource, fields, marshal
+from flask_restx import Namespace, Resource, fields, marshal
 from flask import request
 
 from . import model
