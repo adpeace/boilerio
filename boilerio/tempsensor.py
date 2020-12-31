@@ -53,7 +53,11 @@ class EmonTHSensor(object):
             logger.critical("Exception escaped from MQTT handler for %s",
                             str(self), exc_info=True)
 
-        # Call callbacks:
+        # Call callbacks, making sure any escaping exceptions don't cause
+        # subsequent callbacks to fail:
         logger.debug("Temperature update: %s", str(self.temperature))
         for cb in self._callbacks:
-            cb(self)
+            try:
+                cb(self)
+            except Exception as e:
+                logger.error("Callback %s raised exception %s", cb, e, exc_info=e)
