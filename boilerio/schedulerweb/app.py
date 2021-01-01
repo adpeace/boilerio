@@ -15,7 +15,7 @@ from . import model
 from . import auth
 from .zones import a_device_state, api as zones_api
 from .sensors import api as sensors_api
-from .util import get_conf, get_db
+from .util import get_db
 
 from ..scheduler import SchedulerTemperaturePolicy
 
@@ -23,6 +23,10 @@ from ..scheduler import SchedulerTemperaturePolicy
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
+
+app.config.from_envvar('BOILERIO_SETTINGS')
+app.secret_key = app.config.get('SECRET_KEY')
+
 api = Api(title="BoilerIO Heating Control",
           description="Partially migrated to restplus: some APIs are not "
                       "included here.")
