@@ -5,7 +5,7 @@
 import datetime
 import logging
 
-from flask import Flask, jsonify, request, g
+from flask import Flask, jsonify, request, g, Blueprint, current_app
 from flask_restx import Api, Resource, fields, marshal
 from flask_login import LoginManager, current_user, login_user, logout_user
 from http import HTTPStatus
@@ -22,21 +22,18 @@ from ..scheduler import SchedulerTemperaturePolicy
 
 logging.basicConfig(level=logging.INFO)
 
-app = Flask(__name__)
-
-app.config.from_envvar('BOILERIO_SETTINGS')
-app.secret_key = app.config.get('SECRET_KEY')
+root = Blueprint("boilerio", __name__)
 
 api = Api(title="BoilerIO Heating Control",
-          description="Partially migrated to restplus: some APIs are not "
-                      "included here.")
+            description="Partially migrated to restplus: some APIs are not "
+                        "included here.")
 api.add_namespace(zones_api, path='/zones')
 api.add_namespace(sensors_api, path='/sensor')
-api.init_app(app)
-login_manager = LoginManager(app=app)
+
+login_manager = LoginManager()
 user_manager = auth.UserManager()
 
-@app.teardown_appcontext
+
 def close_db(error):
     if hasattr(g, 'db'):
         g.db.close()
@@ -46,15 +43,14 @@ def close_db(error):
 # Authorization
 
 # Make login_required the default:
-@app.before_request
 def before_request():
-    endpoint = app.view_functions.get(request.endpoint, None)
+    endpoint = current_app.view_functions.get(request.endpoint, None)
     if endpoint is None:
         # Authorized to view the 404
         return
     if (current_user.is_authenticated or
             request.endpoint == 'me' or
-            app.config.get('LOGIN_DISABLED')):
+            current_app.config.get('LOGIN_DISABLED')):
         # Authorized:
         return
     # Not found:
@@ -135,9 +131,9 @@ class Me(Resource):
 
         try:
             identity = google_token.validate_id_token(
-                id_token, app.config['GOOGLE_CLIENT_ID'])
+                id_token, current_app.config['GOOGLE_CLIENT_ID'])
         except ValueError:
-            return 'Invalid ID token', HTTPStatus.FORBIDDEN
+            return 'Invalid credentials', HTTPStatus.FORBIDDEN
 
         # Get the user info out of the validated identity
         if ('sub' not in identity or
@@ -196,7 +192,7 @@ def today_by_time_from_zones(today_by_zone):
     return [{'when': entry['when'].strftime('%H:%M'), 'zones': entry['zones']}
             for entry in today_by_time]
 
-@app.route("/summary")
+@root.route("/summary")
 def get_summary():
     now = datetime.datetime.now()
     db = get_db()
@@ -277,7 +273,7 @@ def full_schedule_to_dict(full_schedule):
 #------------------------------------------------------------------------------
 # Schedule.  This is a bit untidy/non-idiomatic.
 
-@app.route("/schedule")
+@root.route("/schedule")
 def get_schedule():
     db = get_db()
     full_schedule = model.FullSchedule.from_db(db)
@@ -289,7 +285,7 @@ def get_schedule():
         'target_override': tgt_override
         })
 
-@app.route("/schedule/new_entry", methods=["POST"])
+@root.route("/schedule/new_entry", methods=["POST"])
 def add_schedule_entry():
     db = get_db()
     zones = model.Zone.all_from_db(db)
@@ -311,7 +307,7 @@ def add_schedule_entry():
     db.commit()
     return ''
 
-@app.route("/schedule/delete_entry", methods=["POST"])
+@root.route("/schedule/delete_entry", methods=["POST"])
 def remove_schedule_entry():
     db = get_db()
     try:
@@ -326,3 +322,28 @@ def remove_schedule_entry():
     model.FullSchedule.delete_entry(db, day, time, zone)
     db.commit()
     return ''
+
+
+def create_app(test_config=None):
+    """Create the flask application.
+
+    Uses test_config to specify the configuration if set, otherwise loads it
+    from a file specified by hte BOILERIO_SETTINGS environment variable.
+    """
+    app = Flask(__name__)
+
+    if test_config:
+        app.config.from_mapping(test_config)
+    else:
+        app.config.from_envvar('BOILERIO_SETTINGS')
+
+    app.secret_key = app.config.get('SECRET_KEY')
+
+    api.init_app(app)
+    login_manager.init_app(app)
+
+    app.teardown_appcontext(close_db)
+    app.before_request(before_request)
+    app.register_blueprint(root)
+
+    return app

@@ -39,9 +39,11 @@ FAKE_USER_EXPECTED_RESPONSE = {
 
 @pytest.fixture
 def client():
-    app.app.config['GOOGLE_CLIENT_ID'] = TEST_CLIENT_ID
-    app.app.config['SECRET_KEY'] = 'not_the_real_one'
-    yield app.app.test_client()
+    flaskapp = app.create_app({
+        'GOOGLE_CLIENT_ID': TEST_CLIENT_ID,
+        'SECRET_KEY': 'not_the_real_one',
+    })
+    yield flaskapp.test_client()
 
 
 def test_cannot_login_with_no_id_token(client):
