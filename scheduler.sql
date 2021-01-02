@@ -2,15 +2,17 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 9.5.14
--- Dumped by pg_dump version 9.5.14
+-- Dumped from database version 10.12 (Ubuntu 10.12-0ubuntu0.18.04.1)
+-- Dumped by pg_dump version 10.12 (Ubuntu 10.12-0ubuntu0.18.04.1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SELECT pg_catalog.set_config('search_path', '', false);
 SET check_function_bodies = false;
+SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
@@ -204,6 +206,43 @@ ALTER SEQUENCE public.sensor_sensor_id_seq OWNED BY public.sensor.sensor_id;
 
 
 --
+-- Name: users; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.users (
+    user_id integer NOT NULL,
+    google_subscriber_id character varying(255) NOT NULL,
+    name character varying(255) NOT NULL,
+    email character varying(255) NOT NULL,
+    picture character varying(255)
+);
+
+
+ALTER TABLE public.users OWNER TO postgres;
+
+--
+-- Name: users_user_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.users_user_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.users_user_id_seq OWNER TO postgres;
+
+--
+-- Name: users_user_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.users_user_id_seq OWNED BY public.users.user_id;
+
+
+--
 -- Name: zones; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -239,28 +278,35 @@ ALTER SEQUENCE public.zones_zone_id_seq OWNED BY public.zones.zone_id;
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: gradient_measurement id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.gradient_measurement ALTER COLUMN id SET DEFAULT nextval('public.gradient_measurement_id_seq'::regclass);
 
 
 --
--- Name: sensor_id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: sensor sensor_id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.sensor ALTER COLUMN sensor_id SET DEFAULT nextval('public.sensor_sensor_id_seq'::regclass);
 
 
 --
--- Name: zone_id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: users user_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users ALTER COLUMN user_id SET DEFAULT nextval('public.users_user_id_seq'::regclass);
+
+
+--
+-- Name: zones zone_id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.zones ALTER COLUMN zone_id SET DEFAULT nextval('public.zones_zone_id_seq'::regclass);
 
 
 --
--- Name: device_reported_state_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: device_reported_state device_reported_state_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.device_reported_state
@@ -268,7 +314,7 @@ ALTER TABLE ONLY public.device_reported_state
 
 
 --
--- Name: gradient_measurement_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: gradient_measurement gradient_measurement_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.gradient_measurement
@@ -276,7 +322,7 @@ ALTER TABLE ONLY public.gradient_measurement
 
 
 --
--- Name: override_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: override override_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.override
@@ -284,7 +330,7 @@ ALTER TABLE ONLY public.override
 
 
 --
--- Name: schedule_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: schedule schedule_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.schedule
@@ -292,7 +338,7 @@ ALTER TABLE ONLY public.schedule
 
 
 --
--- Name: sensor_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: sensor sensor_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.sensor
@@ -300,7 +346,7 @@ ALTER TABLE ONLY public.sensor
 
 
 --
--- Name: sensor_reading_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: sensor_reading sensor_reading_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.sensor_reading
@@ -308,7 +354,15 @@ ALTER TABLE ONLY public.sensor_reading
 
 
 --
--- Name: zones_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (user_id);
+
+
+--
+-- Name: zones zones_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.zones
@@ -323,7 +377,7 @@ CREATE INDEX sensor_reading_sensor_time ON public.sensor_reading USING btree (se
 
 
 --
--- Name: fkey_zone; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: gradient_measurement fkey_zone; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.gradient_measurement
@@ -331,7 +385,7 @@ ALTER TABLE ONLY public.gradient_measurement
 
 
 --
--- Name: fkey_zone_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: device_reported_state fkey_zone_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.device_reported_state
@@ -339,7 +393,7 @@ ALTER TABLE ONLY public.device_reported_state
 
 
 --
--- Name: sensor_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: zones sensor_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.zones
@@ -347,7 +401,7 @@ ALTER TABLE ONLY public.zones
 
 
 --
--- Name: sensor_reading_sensor_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: sensor_reading sensor_reading_sensor_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.sensor_reading
@@ -355,7 +409,7 @@ ALTER TABLE ONLY public.sensor_reading
 
 
 --
--- Name: zone_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: schedule zone_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.schedule
@@ -363,11 +417,18 @@ ALTER TABLE ONLY public.schedule
 
 
 --
--- Name: zone_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: override zone_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.override
     ADD CONSTRAINT zone_fkey FOREIGN KEY (zone) REFERENCES public.zones(zone_id);
+
+
+--
+-- Name: TABLE device; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.device TO scheduler;
 
 
 --
@@ -381,19 +442,9 @@ GRANT ALL ON SCHEMA public TO PUBLIC;
 
 
 --
--- Name: TABLE device; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.device TO scheduler;
-
-
---
 -- Name: TABLE device_reported_state; Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON TABLE public.device_reported_state FROM PUBLIC;
-REVOKE ALL ON TABLE public.device_reported_state FROM postgres;
-GRANT ALL ON TABLE public.device_reported_state TO postgres;
 GRANT ALL ON TABLE public.device_reported_state TO scheduler;
 
 
@@ -401,9 +452,6 @@ GRANT ALL ON TABLE public.device_reported_state TO scheduler;
 -- Name: TABLE gradient_measurement; Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON TABLE public.gradient_measurement FROM PUBLIC;
-REVOKE ALL ON TABLE public.gradient_measurement FROM postgres;
-GRANT ALL ON TABLE public.gradient_measurement TO postgres;
 GRANT ALL ON TABLE public.gradient_measurement TO scheduler;
 
 
@@ -411,9 +459,6 @@ GRANT ALL ON TABLE public.gradient_measurement TO scheduler;
 -- Name: SEQUENCE gradient_measurement_id_seq; Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON SEQUENCE public.gradient_measurement_id_seq FROM PUBLIC;
-REVOKE ALL ON SEQUENCE public.gradient_measurement_id_seq FROM postgres;
-GRANT ALL ON SEQUENCE public.gradient_measurement_id_seq TO postgres;
 GRANT ALL ON SEQUENCE public.gradient_measurement_id_seq TO scheduler;
 
 
@@ -421,9 +466,6 @@ GRANT ALL ON SEQUENCE public.gradient_measurement_id_seq TO scheduler;
 -- Name: TABLE override; Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON TABLE public.override FROM PUBLIC;
-REVOKE ALL ON TABLE public.override FROM postgres;
-GRANT ALL ON TABLE public.override TO postgres;
 GRANT ALL ON TABLE public.override TO scheduler;
 
 
@@ -431,9 +473,6 @@ GRANT ALL ON TABLE public.override TO scheduler;
 -- Name: TABLE schedule; Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON TABLE public.schedule FROM PUBLIC;
-REVOKE ALL ON TABLE public.schedule FROM postgres;
-GRANT ALL ON TABLE public.schedule TO postgres;
 GRANT ALL ON TABLE public.schedule TO scheduler;
 
 
@@ -441,9 +480,6 @@ GRANT ALL ON TABLE public.schedule TO scheduler;
 -- Name: TABLE sensor; Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON TABLE public.sensor FROM PUBLIC;
-REVOKE ALL ON TABLE public.sensor FROM postgres;
-GRANT ALL ON TABLE public.sensor TO postgres;
 GRANT ALL ON TABLE public.sensor TO scheduler;
 
 
@@ -451,19 +487,20 @@ GRANT ALL ON TABLE public.sensor TO scheduler;
 -- Name: TABLE sensor_reading; Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON TABLE public.sensor_reading FROM PUBLIC;
-REVOKE ALL ON TABLE public.sensor_reading FROM postgres;
-GRANT ALL ON TABLE public.sensor_reading TO postgres;
 GRANT ALL ON TABLE public.sensor_reading TO scheduler;
+
+
+--
+-- Name: TABLE users; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.users TO scheduler;
 
 
 --
 -- Name: TABLE zones; Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON TABLE public.zones FROM PUBLIC;
-REVOKE ALL ON TABLE public.zones FROM postgres;
-GRANT ALL ON TABLE public.zones TO postgres;
 GRANT ALL ON TABLE public.zones TO scheduler;
 
 

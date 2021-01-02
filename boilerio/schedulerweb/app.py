@@ -7,12 +7,12 @@ import logging
 
 from flask import Flask, jsonify, request, g
 from flask_restx import Api, Resource, fields, marshal
-from flask_login import LoginManager, current_user
+from flask_login import LoginManager, current_user, login_user, logout_user
+from http import HTTPStatus
 
 import basicauth
 
-from . import model
-from . import auth
+from . import model, auth, google_token
 from .zones import a_device_state, api as zones_api
 from .sensors import api as sensors_api
 from .util import get_db
@@ -34,7 +34,7 @@ api.add_namespace(zones_api, path='/zones')
 api.add_namespace(sensors_api, path='/sensor')
 api.init_app(app)
 login_manager = LoginManager(app=app)
-
+user_manager = auth.UserManager()
 
 @app.teardown_appcontext
 def close_db(error):
@@ -52,7 +52,9 @@ def before_request():
     if endpoint is None:
         # Authorized to view the 404
         return
-    if current_user.is_authenticated:
+    if (current_user.is_authenticated or
+            request.endpoint == 'me' or
+            app.config.get('LOGIN_DISABLED')):
         # Authorized:
         return
     # Not found:
@@ -88,6 +90,77 @@ def load_user_from_request(request):
     if hashed_password.decode() == endpoint.device_secret_hashed:
         return auth.Device()
     return None
+
+
+@login_manager.user_loader
+def user_loader(user_id):
+    return user_manager.lookup_user(user_id)
+
+
+@api.route("/me")
+class Me(Resource):
+    """The currently logged-in user.
+
+    GET will return information about the user if a session exists.
+    POST will login a user given an ID token, and set a session cookie.
+    DELETE will log out the currently logged-in user.
+    """
+
+    a_user = api.model("User", {
+        'name': fields.String(description="The user's full name"),
+        'picture': fields.Url(description="A URL to the profile image"),
+    })
+
+    @api.response(200, 'Success', a_user)
+    @api.response(404, 'No user logged in')
+    def get(self):
+        if current_user.is_anonymous:
+            return '', 404
+        return jsonify({
+            'name': current_user.name,
+            'picture': current_user.profile_pic
+        })
+
+    @api.param(
+        'id_token', 'A JWT from the Google Sign-In SDK to be validated',
+        _in='formData')
+    @api.response(200, 'Success', a_user)
+    @api.response(403, "Unauthorized")
+    def post(self):
+        # Validate the identity
+        id_token = request.form.get('id_token')
+        if id_token is None:
+            return "No ID token provided", HTTPStatus.FORBIDDEN
+
+        try:
+            identity = google_token.validate_id_token(
+                id_token, app.config['GOOGLE_CLIENT_ID'])
+        except ValueError:
+            return 'Invalid ID token', HTTPStatus.FORBIDDEN
+
+        # Get the user info out of the validated identity
+        if ('sub' not in identity or
+                'name' not in identity or
+                'picture' not in identity):
+            return "Unexcpected authorization response", HTTPStatus.FORBIDDEN
+
+        # This just adds a new user that hasn't been seen before and assumes it
+        # will work, but you could extend the logic to do something different
+        # (such as only allow known users, or somehow mark a user as new so
+        # your frontend can collect extra profile information).
+        user = user_manager.lookup_and_update_google_user(
+                identity['sub'], identity['name'], identity['email'],
+                identity['picture'])
+        if user is None:
+            return "Unauthorized user", HTTPStatus.FORBIDDEN
+
+        # Authorize the user:
+        login_user(user, remember=True)
+        return self.get()
+
+    def delete(self):
+        logout_user()
+        return "", 204
 
 
 # --------------------------------------------------------------------------

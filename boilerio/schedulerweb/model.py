@@ -307,3 +307,46 @@ class EndpointIdentity(object):
             device_id, device_secret_hashed, salt = cursor.fetchone()
             salt = base64.b64decode(salt)
             return cls(device_id, device_secret_hashed, salt)
+
+
+class UserIdentity:
+    def __init__(self, user_id, google_subscriber_id, name, email, picture):
+        self.user_id = user_id
+        self.google_subscriber_id = google_subscriber_id
+        self.name = name
+        self.email = email
+        self.picture = picture
+
+    def update(self, db, name, email, picture):
+        self.name = name
+        self.email = email
+        self.picture = picture
+
+        cursor = db.cursor()
+        cursor.execute(
+            "update users set name=%s, email=%s, picture=%s "
+            "where user_id=%s", (self.name, self.email, self.picture, self.user_id)
+        )
+        # Check 1 user updated
+        if cursor.rowcount != 1:
+            raise ValueError("Failed to update 1 user (%d)" % r.rowcount)
+
+    @classmethod
+    def lookup_user_by_google_id(cls, db, google_subscriber_id):
+        cursor = db.cursor()
+        cursor.execute(
+            "select user_id, google_subscriber_id, name, email, picture from users "
+            "where google_subscriber_id=%s", (google_subscriber_id,))
+        if cursor.rowcount != 1:
+            return None
+        return cls(*cursor.fetchone())
+
+    @classmethod
+    def lookup_user_by_internal_id(cls, db, user_id):
+        cursor = db.cursor()
+        cursor.execute(
+            "select user_id, google_subscriber_id, name, email, picture from users "
+            "where user_id=%s", (user_id,))
+        if cursor.rowcount != 1:
+            return None
+        return cls(*cursor.fetchone())
