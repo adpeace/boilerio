@@ -71,57 +71,63 @@ Now run `boiler_to_mqtt /dev/ttyUSB0` (replacing `/dev/ttyUSB0` with the locatio
 of the Danfoss transceiver device, e.g. your JeeLink; JeeLink will probably show
 up at that device name though if you don't have other USB devices connected).
 
-### The web app
+## Overview
+
+The end-to-end application comes in three parts:
+
+1.  The web app backend.  This is the `schedulerweb` Flask app.  It presents a
+    REST API for managing a heating schedule, and is used both by the "device"
+    implementation (that translates it into boiler on/off commands and typically
+    runs "on-site") and the user interface (which is a web app).  The
+    recommended configuration is for this to be proxied through nginx and run
+    inside uwsgi.  It uses postgres as a storage backend and assumes a database and role exists called `scheduler`.
+
+2.  The thermostat controller.  This is the `scheduler` Python script.  Ensure
+    this daemon is running to control the boiler relay and update the cache of
+    the current temperature in the backend web app.
+
+3.  The web-based UI.  This talks to the schedulerweb app and presents a UI
+    where the current temperature and schedule can be configured.  It is in a separate repository, `boilerio-ui`.
+
+### The web app backend
 
 To run the scheduler flask application for development, using `flask run`:
 
 ```
-$ FLASK_APP=boilerio/schedulerweb.py flask run
+$ FLASK_APP=boilerio/schedulerweb/app.py BOILERIO_CONFIG=settings.cfg flask run
 ```
 
-## The scheduler
+The settings file contains database and other configuration parameters.  An exmaple file is in "example-settings.cfg" but you should copy this and update it to suit your needs.
 
-The scheduler comes in four parts:
-
-1.  The database.  You need to be running postgres; once you have installed
-postgres you can create a database user and database for the scheduler, then
-user scheduler.sql to create the requisite tables.  (This currently assumes the
-databsae and a role exists called `scheduler`.)
-
-2.  The controller.  This is the `scheduler` Python script.  Ensure this daemon
-is running to control the boiler relay and update the cache of the current
-temperature in the backend web app.
-
-3.  The web app.  This is the `schedulerweb` Flask app.  The recommended
-configuration is for this to be proxied through nginx and run inside uwsgi.
-
-4.  The web-based UI.  This talks to the schedulerweb app and presents a UI
-where the current temperature and schedule can be configured.
-
-Example uWSGI configuration for `schedulerweb` (assuming you have the Python
-package installed) - this can be placed in `/etc/uwsgi/apps-available` on
-Ubuntu's version of uwsgi:
+To run in production, you will need to use a production webserver.  I use uWSGI
+behind nginx.  Here is an example uWSGI configuration for `schedulerweb`
+(assuming you have the Python package installed) - this can be placed in
+`/etc/uwsgi/apps-available` on Ubuntu's version of uwsgi:
 
 ```
 [uwsgi]
 socket = /var/www/boilerio/thermostat.sock
 module = boilerio.schedulerweb:app
 logto = /var/log/uwsgi/boilerio/thermostat.log
+env = BOILERIO_SETTINGS=/etc/sensors/settings.cfg
 uid = boilerio
 gid = www-data
 chmod-socket = 664
 ```
 
-### scheduler: The controller
+This assumes you have placed your settings file in `/etc/sensors/settings.cfg`.
+
+### scheduler: The device/controller
 
 The local scheduler component provides the timer and thermostat behaviour: it
 gets the target temperature periodically from the web service and controls the
 boiler by sending messages to the boiler\_to\_mqtt program.
 
 The scheduler takes no arguments: the configuration will come from the web
-service.
+service.  In order to actuate a boiler, you will need something listening to
+MQTT to interface to the boiler relays: the boiler_to_mqtt script can do this.
 
-## boiler\_to\_mqtt
+## Boiler control software: boiler\_to\_mqtt
 
 The `boiler_to_mqtt` script implements an MQTT-topic based interface on top
 of the serial protocol provided in the thermostat.git repository.  In short: it
