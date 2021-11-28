@@ -1,9 +1,9 @@
 # The BoilerIO Software Thermostat
 
-BoilerIO can control heating in a zone of your home.  Code is provided here
-to connect with Danfoss RF receivers though other implementations could
-easily be added, and to receive temperature updates over MQTT in a format
-described later in this README.
+BoilerIO can control heating in your home.  Code is provided here to connect
+with Danfoss RF receivers though other implementations could easily be added,
+and to receive temperature updates over MQTT in a format described later in this
+README.
 
 This has been tested with the Danfoss RF transciever code in the thermostat.git
 repository at https://github.com/adpeace/thermostat.git.
