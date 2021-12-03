@@ -170,6 +170,7 @@ a_device_state = api.model('Device reported state', {
 @api.param('zone_id', 'Zone ID for the time to target.')
 class ReportedState(Resource):
     @api.expect(a_device_state)
+    @csrf_protection
     def post(self, zone_id):
         db = get_db()
         device_state = model.DeviceState(

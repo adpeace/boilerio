@@ -94,7 +94,7 @@ class ZoneController(object):
         ttt = self.get_time_to_target()
         self.reported_state['time_to_target'] = ttt.total_seconds() if ttt else None
         r = requests.post(url, auth=self.scheduler_auth,
-            timeout=10, json=self.reported_state)
+            timeout=10, json=self.reported_state, headers={'X-Requested-With': 'device'})
         if r.status_code == 200:
             logger.info("Reported new state for zone %d: %s",
                     self.zone.zone_id, str(self.reported_state))

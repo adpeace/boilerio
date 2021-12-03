@@ -27,7 +27,7 @@ class TempSensorUpdater(object):
                 'value': sensor.temperature.reading,
             }
 
-            r = requests.post(sensor_url, json=data, auth=self.auth)
+            r = requests.post(sensor_url, json=data, auth=self.auth, headers={'X-Requested-With': 'device'})
             r.raise_for_status()
         except Exception as e:
             logger.error("Failed to post update for sensor %d: %s",
