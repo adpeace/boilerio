@@ -222,7 +222,7 @@ def construct_sensors(scheduler_url, auth):
     SENSOR_BACKUP_FILE = '/var/lib/boilerio/sensors'
 
     sensors = json.loads(get_url_with_fallback(SENSOR_BACKUP_FILE,
-                                               scheduler_url + '/sensor', auth))
+                                               scheduler_url + '/sensor/', auth))
     if sensors is None:
         raise ZoneInfoUnavailable()
 
