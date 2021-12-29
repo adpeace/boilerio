@@ -15,7 +15,7 @@ def test_time_to_target_returns_None_until_initialized():
 
         thermostat.target = 20
         thermostat.is_heating = True
-        sensor.temperature = None
+        sensor.reading = None
 
         zc = zones.ZoneController(
             zone, boiler, sensor, thermostat, 'https://scheduler/api', None,
@@ -25,9 +25,10 @@ def test_time_to_target_returns_None_until_initialized():
         # There is no gradient table or last recorded temperature:
         assert zc.get_time_to_target() is None
 
-        sensor.temperature = MagicMock()
-        sensor.temperature.reading = 15.0
-        sensor.temperature.when = datetime.now()
+        sensor.reading = MagicMock()
+        sensor.reading.temperature = 15.0
+        sensor.reading.relative_humidity = 60.0
+        sensor.reading.when = datetime.now()
         zc.temperature_change(sensor)
 
         # Still no gradient table: should return None:

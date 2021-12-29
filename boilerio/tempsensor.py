@@ -1,26 +1,27 @@
 import json
 import datetime
 import logging
+from dataclasses import dataclass
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-
-class TempReading(object):
-    def __init__(self, when, temp):
-        self.when = when
-        self.reading = temp
+@dataclass
+class SensorReading(object):
+    when: datetime.datetime
+    temperature: float
+    relative_humidity: float
 
     def __str__(self):
-        return "<TempReading: %f deg C at %s>" % (self.reading, self.when)
+        return "<TempReading: %f deg C %f RH at %s>" % (self.temperature, self.relative_humidity, self.when)
 
 
 class EmonTHSensor(object):
     """A temperature sensor from OpenEnergyMonitor."""
 
     def __init__(self, sensor_id, locator):
-        self.temperature = None
+        self.reading = None
         self.sensor_id = sensor_id
         self.locator = locator
         self._callbacks = []
@@ -44,18 +45,23 @@ class EmonTHSensor(object):
                 return
 
             temp = float(data['temperature'])
-            if self.temperature and temp == self.temperature.reading:
+            rh = float(data['humidity'])
+
+            # If the value didn't change, don't signal an update:
+            if self.reading and (
+                    temp == self.reading.temperature and
+                    rh == self.reading.relative_humidity):
                 return
 
             now = datetime.datetime.now()
-            self.temperature = TempReading(now, temp)
+            self.reading = SensorReading(now, temp, rh)
         except Exception:
             logger.critical("Exception escaped from MQTT handler for %s",
                             str(self), exc_info=True)
 
         # Call callbacks, making sure any escaping exceptions don't cause
         # subsequent callbacks to fail:
-        logger.debug("Temperature update: %s", str(self.temperature))
+        logger.debug("Temperature update: %s", str(self.reading))
         for cb in self._callbacks:
             try:
                 cb(self)

@@ -12,7 +12,7 @@ def test_callback_with_correct_temperature():
     # Given
     msg = mock.MagicMock()
     msg.topic = LOCATOR
-    msg.payload = '{"temperature": 12.5}'
+    msg.payload = '{"temperature": 12.5, "humidity": 60.0}'
 
     ts = tempsensor.EmonTHSensor(SENSOR_ID, LOCATOR)
     cb = mock.Mock()
@@ -23,7 +23,8 @@ def test_callback_with_correct_temperature():
 
     # Then:
     cb.assert_called_with(ts)
-    assert ts.temperature.reading == 12.5
+    assert ts.reading.temperature == 12.5
+    assert ts.reading.relative_humidity == 60.0
 
 
 def test_failed_callback_doesnt_cause_leaked_exception():

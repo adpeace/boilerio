@@ -45,7 +45,7 @@ class ZoneController(object):
         self._update_state(state=new_state, dutycycle=dutycycle)
 
     def temperature_change(self, sensor):
-        self._update_state(current_temp=sensor.temperature.reading)
+        self._update_state(current_temp=sensor.reading.temperature)
 
     def _update_state(self, **kwargs):
         """Updates state with arguments passed."""
@@ -66,12 +66,12 @@ class ZoneController(object):
 
         # If we're not heating, just return nothing:
         if (not self.thermostat.is_heating or
-            self._sensor.temperature is None or
-            self.thermostat.target < self._sensor.temperature.reading):
+            self._sensor.reading is None or
+            self.thermostat.target < self._sensor.reading.temperature):
             return None
         else:
             outside = self.weather.get_weather()
-            delta_t = self._sensor.temperature.reading - outside['temperature']
+            delta_t = self._sensor.reading.temperature - outside['temperature']
 
             # Find a gradient where the delta between inside and out was
             # closest to the current temperature:
@@ -86,7 +86,7 @@ class ZoneController(object):
             # Now use it to estimate heating time:
             if match is None:
                 return None
-            amount_to_heat = self.thermostat.target - self._sensor.temperature.reading
+            amount_to_heat = self.thermostat.target - self._sensor.reading.temperature
             return timedelta(hours=(amount_to_heat / match['gradient']))
 
     def report_updated_state(self):

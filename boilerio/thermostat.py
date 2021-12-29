@@ -1,7 +1,6 @@
 import datetime
 import logging
 
-from .tempsensor import TempReading
 from boilerio import pid, pwm
 
 logging.basicConfig()
@@ -92,24 +91,24 @@ class Thermostat(object):
         """Act on time interval passing.
 
         now: the current datetime"""
-        if (self._sensor.temperature is None or self._target is None or
-                self._sensor.temperature.when < (now - self.STALE_PERIOD)):
+        if (self._sensor.reading is None or self._target is None or
+                self._sensor.reading.when < (now - self.STALE_PERIOD)):
             # Reading is stale: turn off the boiler:
             self._update_state(self.MODE_STALE, 0)
             self._boiler.off()
-        elif self._sensor.temperature.reading < self._target.target_zone_min:
+        elif self._sensor.reading.temperature < self._target.target_zone_min:
             # Reading is valid and below target range:
             self._update_state(self.MODE_ON, 1)
             self._boiler.on()
-        elif (self._sensor.temperature.reading > self._target.target_zone_min and
-              self._sensor.temperature.reading <= self._target.target_zone_max):
+        elif (self._sensor.reading.temperature > self._target.target_zone_min and
+              self._sensor.reading.temperature <= self._target.target_zone_max):
             # Reading is valid and within the target range:
             # New measurement cycle?
             if (self._measurement_begin is None or
                     self._measurement_begin + self.PWM_PERIOD < now):
                 self._measurement_begin = now
                 # Adjust duty cycle:
-                pid_output = self._pid.update(self._sensor.temperature.reading)
+                pid_output = self._pid.update(self._sensor.reading.temperature)
                 self._pwm_control.setDutyCycle(pid_output)
 
                 logger.debug("PID output: %f", pid_output)
@@ -120,7 +119,7 @@ class Thermostat(object):
 
             self._update_state(self.MODE_PWM, self._pwm_control.dutycycle)
             self._pwm_control.update(now)
-        elif self._sensor.temperature.reading > self._target.target_zone_max:
+        elif self._sensor.reading.temperature > self._target.target_zone_max:
             # Reading is valid and above the target range:
             self._update_state(self.MODE_OFF, 0)
             self._boiler.off()
