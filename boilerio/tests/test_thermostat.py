@@ -20,15 +20,15 @@ class MockSensor(object):
     def set_temp(self, temp):
         self.temperature = temp
 
-@pytest.yield_fixture
+@pytest.fixture
 def sensor():
     yield MockSensor()
 
-@pytest.yield_fixture
+@pytest.fixture
 def boiler():
     yield FakeBoiler()
 
-@pytest.yield_fixture
+@pytest.fixture
 def thermostat(boiler, sensor):
     yield Thermostat(boiler, sensor)
 
