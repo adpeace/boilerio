@@ -184,7 +184,7 @@ def get_url_with_fallback(fallback, url, auth):
             with open(fallback, 'w') as f:
                 f.write(r.text)
         except:
-            logger.warn("Unable to write backup zone file.")
+            logger.warning("Unable to write backup zone file.")
         result = r.text
     else:
         # That failed, try to get from last backup:
