@@ -1,7 +1,7 @@
 """Tests for the tempsensor module."""
 
 from .. import tempsensor
-import mock
+from unittest import mock
 
 
 LOCATOR = 'foo/sensor1'

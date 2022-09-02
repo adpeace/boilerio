@@ -1,11 +1,9 @@
 # Note that this file should probably be split into two along with
 # separation of scheduler policy from the scheduler app.
 
-from mock import Mock, MagicMock
-from datetime import time, datetime, timedelta
+from datetime import time, datetime
 from .. import scheduler
 from ..schedulerweb import model
-import mock
 import requests_mock
 import requests.exceptions
 

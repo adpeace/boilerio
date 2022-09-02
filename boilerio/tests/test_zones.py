@@ -1,5 +1,5 @@
 import requests_mock
-from mock import MagicMock
+from unittest.mock import MagicMock
 from datetime import timedelta, datetime
 
 from boilerio import zones

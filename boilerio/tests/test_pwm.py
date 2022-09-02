@@ -1,4 +1,4 @@
-import mock
+from unittest import mock
 from datetime import datetime, timedelta
 from boilerio import pwm
 
