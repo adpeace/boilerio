@@ -8,6 +8,7 @@ import logging
 from flask import Flask, jsonify, request, g, Blueprint, current_app
 from flask_restx import Api, Resource, fields, marshal
 from flask_login import LoginManager, current_user, login_user, logout_user
+from flask_restx.apidoc import apidoc
 from http import HTTPStatus
 
 import basicauth
@@ -49,7 +50,7 @@ def before_request():
         # Authorized to view the 404
         return
     if (current_user.is_authenticated or
-            request.endpoint == 'me' or
+            request.endpoint == 'api.me' or
             current_app.config.get('LOGIN_DISABLED')):
         # Authorized:
         return
@@ -364,11 +365,16 @@ def create_app(test_config=None):
 
     app.secret_key = app.config.get('SECRET_KEY')
 
-    api.init_app(app)
     login_manager.init_app(app)
+
+    api_blueprint = Blueprint('api', __name__)
+    api_blueprint.add_url_rule('/', 'doc', api.render_doc)
+    api.init_app(api_blueprint)
+    app.register_blueprint(apidoc, url_prefix=app.config.get('BASE_URL', '/'))
 
     app.teardown_appcontext(close_db)
     app.before_request(before_request)
-    app.register_blueprint(root)
+    app.register_blueprint(root, url_prefix=app.config.get('BASE_URL', '/'))
+    app.register_blueprint(api_blueprint, url_prefix=app.config.get('BASE_URL', '/'))
 
     return app
