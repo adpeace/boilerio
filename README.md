@@ -11,7 +11,7 @@ repository at https://github.com/adpeace/thermostat.git.
 No warranty is provided: please be careful if you are messing with your own
 heating system.
 
-For more information, please see https://hackingathome.wordpress.com.
+For more information, please see https://andyhacks.com.
 
 ## Installation
 
