@@ -5,6 +5,13 @@ from pathlib import Path
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
 
+test_deps = [
+  'pytest', 'requests-mock', 'mock'
+]
+extras = {
+  'test': test_deps
+}
+
 setup(name='boilerio',
       version='0.0.5',
       description='A software thermostat and heating control system',
@@ -26,7 +33,9 @@ setup(name='boilerio',
       setup_requires=['pytest-runner'],
       install_requires=[
           'Flask', 'requests', 'psycopg2-binary', 'paho-mqtt',
+          'werkzeug <= 2.1.2',
           'flask_restx', 'pyserial', 'flask-login', 'basicauth',
           'cachecontrol', 'google-auth-oauthlib'],
-      tests_require=['pytest', 'requests-mock', 'mock'],
+      tests_require=test_deps,
+      extras_require=extras,
       zip_safe=False)

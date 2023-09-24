@@ -368,9 +368,10 @@ def create_app(test_config=None):
     login_manager.init_app(app)
 
     api_blueprint = Blueprint('api', __name__)
-    api_blueprint.add_url_rule('/', 'doc', api.render_doc)
     api.init_app(api_blueprint)
-    app.register_blueprint(apidoc, url_prefix=app.config.get('BASE_URL', '/'))
+
+    app.register_blueprint(apidoc, name="rightdocs", url_prefix=app.config.get('BASE_URL', '/'))
+    api_blueprint.add_url_rule('/', 'doc', api.render_doc)
 
     app.teardown_appcontext(close_db)
     app.before_request(before_request)
