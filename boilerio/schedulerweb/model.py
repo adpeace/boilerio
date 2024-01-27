@@ -2,6 +2,7 @@
 
 import psycopg2
 import base64
+import datetime
 
 
 def db_connect(host, db, user, pw):
@@ -18,7 +19,7 @@ def db_connect(host, db, user, pw):
 
 class FullSchedule(object):
     """ The heating schedule. """
-    def __init__(self, entries):
+    def __init__(self, entries: list[tuple]):
         """Initialise a schedule representation.
 
         entries is a list of entries, of the form:
@@ -91,7 +92,7 @@ class Zone(object):
 
 class TargetOverride(object):
     """ Override the set temperature for a period of time. """
-    def __init__(self, end, temp, zone):
+    def __init__(self, end: datetime.datetime, temp: float, zone: int):
         self.end = end
         self.temp = temp
         self.zone = zone
