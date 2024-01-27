@@ -206,31 +206,32 @@ class SensorReading(object):
 
 class Sensor(object):
     """A sensor, currently sensor."""
-    def __init__(self, sensor_id, name, locator):
+    def __init__(self, sensor_id: int, name: str, locator: str, zone_id: int):
         self.sensor_id = sensor_id
         self.name = name
         self.locator = locator
+        self.zone_id = zone_id
 
     @classmethod
     def all_from_db(cls, connection):
         cursor = connection.cursor()
-        cursor.execute("select sensor_id, name, locator from sensor")
+        cursor.execute("select sensor_id, name, locator, zone_id from sensor")
         data = cursor.fetchall()
-        return [cls(r[0], r[1], r[2]) for r in data]
+        return [cls(r[0], r[1], r[2], r[3]) for r in data]
 
     @classmethod
     def from_db(cls, connection, sensor_id):
         cursor = connection.cursor()
-        cursor.execute("select name, locator from sensor "
+        cursor.execute("select name, locator, zone_id from sensor "
                        "where sensor_id=%s", (sensor_id, ))
         data = cursor.fetchone()
         if not data:
             raise ValueError("No sensor found (%s)" % sensor_id)
         data = data[0]
-        return cls(sensor_id, data[0], data[1])
+        return cls(sensor_id, data[0], data[1], data[2])
 
-    def get_last_readings(self, connection):
-        """ Returns a list of the sensor's last readings.
+    def get_last_readings(self, connection) -> list[SensorReading]:
+        """Returns a list of the sensor's last readings.
 
         Includes one reading per metric_type published.
         """
