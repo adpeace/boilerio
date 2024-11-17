@@ -185,10 +185,13 @@ class DeviceState(object):
         return cls(data[0], zone_id, *data[1:])
 
 
+SENSOR_METRIC_TYPES = ['temperature', 'humidity']
+
+
 class SensorReading(object):
     """Represents a single sensor reading.
 
-    metric_type is one of 'temperature', 'humidity', 'battery_voltage'.
+    metric_type is one of 'temperature', 'humidity'.
     """
     def __init__(self, sensor_id, when, metric_type, value):
         self.sensor_id = sensor_id
@@ -215,14 +218,14 @@ class Sensor(object):
     @classmethod
     def all_from_db(cls, connection):
         cursor = connection.cursor()
-        cursor.execute("select sensor_id, name, locator, zone_id from sensor")
+        cursor.execute("select sensor_id, name, locator, zone from sensor")
         data = cursor.fetchall()
         return [cls(r[0], r[1], r[2], r[3]) for r in data]
 
     @classmethod
     def from_db(cls, connection, sensor_id):
         cursor = connection.cursor()
-        cursor.execute("select name, locator, zone_id from sensor "
+        cursor.execute("select name, locator, zone from sensor "
                        "where sensor_id=%s", (sensor_id, ))
         data = cursor.fetchone()
         if not data:
@@ -235,12 +238,16 @@ class Sensor(object):
 
         Includes one reading per metric_type published.
         """
+        readings = []
         cursor = connection.cursor()
-        cursor.execute("select metric_type, time, value from sensor_reading "
-                       "where sensor_id=%s "
-                       "order by time desc limit 1", (self.sensor_id, ))
-        return [SensorReading(self.sensor_id, record[1], record[0], record[2])
-                for record in cursor]
+        for metric_type in SENSOR_METRIC_TYPES:
+            cursor.execute("select metric_type, time, value from sensor_reading "
+                        "where sensor_id=%s and metric_type=%s"
+                        "order by time desc limit 1", (self.sensor_id, metric_type))
+            row = cursor.fetchone()
+            if row:  # Only create reading if we found one
+                readings.append(SensorReading(self.sensor_id, row[1], metric_type, row[2]))
+        return readings
 
 
 class TemperatureGradientMeasurement(object):
