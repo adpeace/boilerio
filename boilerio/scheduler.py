@@ -7,8 +7,8 @@ import os
 import json
 import datetime
 from datetime import timedelta
-import threading
 import logging
+import time
 
 import paho.mqtt.client as mqtt
 import requests
@@ -169,10 +169,6 @@ def mqtt_on_connect(client, userdata, flags, rc):
         client.subscribe(sensor.locator)
     client.subscribe(userdata['thermostat_schedule_change_topic'])
 
-def mqtt_on_message(client, userdata, msg):
-    if msg.topic == userdata['thermostat_schedule_change_topic']:
-        userdata['timer_event'].set()
-
 def get_url_with_fallback(fallback, url, auth):
     """Gets a URL and updates fallback file.
 
@@ -292,12 +288,10 @@ def main():
     sensors = construct_sensors(scheduler_url, auth)
     zone_info = load_zone_info(scheduler_url, auth)
 
-    period_event = threading.Event()
     mqttc = mqtt.Client(userdata={
         'conf': conf,
         'thermostat_schedule_change_topic':
             conf.get('heating', 'thermostat_schedule_change_topic'),
-        'timer_event': period_event,
         'scheduler_url': scheduler_url,
         'auth': auth,
         'sensors': sensors,
@@ -305,7 +299,6 @@ def main():
     mqttc.username_pw_set(conf.get('mqtt', 'user'),
                           conf.get('mqtt', 'password'))
     mqttc.on_connect = mqtt_on_connect
-    mqttc.on_message = mqtt_on_message
     mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
 
     sensor_updater = update_sensor.TempSensorUpdater(scheduler_url, auth)
@@ -334,8 +327,7 @@ def main():
     controller = AllZoneController(scheduler_url, auth, zone_controllers)
     while True:
         controller.iteration(datetime.datetime.now())
-        period_event.wait(timeout=1)
-        period_event.clear()
+        time.sleep(1)
 
     mqttc.loop_stop()
 
