@@ -1,12 +1,10 @@
-#!/usr/bin/python -u
-
 import argparse
 import serial
 import sys
 import paho.mqtt.client as mqtt
 import json
 import logging
-from boilerio import config
+from . import config
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -39,8 +37,8 @@ def on_message(client, userdata, msg):
     logging.debug("Queued command %s", str(request))
 
 
-def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
-         sensor_filename):
+def run(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
+        sensor_filename):
     # command_queue is a shared queue containing request objects, which are
     # dictionaries like: {'command': '[O|X|L]', 'thermostat': '0xXXXX'}
     # Messages are added when received from mqtt and processed in the loop
@@ -111,7 +109,7 @@ def main(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
         client.loop_stop()
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
         description='Interface between MQTT and serial-controlled '
                     'heating relay')
@@ -120,9 +118,13 @@ if __name__ == "__main__":
                              "e.g. /dev/ttyUSB0")
     args = parser.parse_args()
     conf = config.load_config()
-    main(conf.get('mqtt', 'host'),
-         conf.get('mqtt', 'user'),
-         conf.get('mqtt', 'password'),
-         conf.get('heating', 'info_basetopic'),
-         conf.get('heating', 'demand_request_topic'),
-         args.device_path)
+    run(conf.get('mqtt', 'host'),
+        conf.get('mqtt', 'user'),
+        conf.get('mqtt', 'password'),
+        conf.get('heating', 'info_basetopic'),
+        conf.get('heating', 'demand_request_topic'),
+        args.device_path)
+
+
+if __name__ == "__main__":
+    main()

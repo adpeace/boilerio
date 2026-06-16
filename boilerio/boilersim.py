@@ -100,10 +100,10 @@ def run_simulation(start_temp, target_temp, sim_duration_mins,
         else:
             room_temp_with_error = house.room_temp
         thermostat.update_temperature(TempReading(now, room_temp_with_error))
-        print (now - start).total_seconds() / 60, target_temp, boiler_on, \
-              thermostat._pwm_control.dutycycle, house.room_temp, room_temp_with_error, \
-              thermostat._pid.last_prop, thermostat._pid.error_integral, \
-              thermostat._pid.last_diff
+        print((now - start).total_seconds() / 60, target_temp, boiler_on,
+              thermostat._pwm_control.dutycycle, house.room_temp, room_temp_with_error,
+              thermostat._pid.last_prop, thermostat._pid.error_integral,
+              thermostat._pid.last_diff)
 
 def main():
     parser = argparse.ArgumentParser()

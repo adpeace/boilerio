@@ -26,13 +26,10 @@ logging.basicConfig(level=logging.INFO)
 
 root = Blueprint("boilerio", __name__)
 
-api = Api(title="BoilerIO Heating Control",
-            description="Partially migrated to restplus: some APIs are not "
-                        "included here.")
-api.add_namespace(zones_api, path='/zones')
-api.add_namespace(sensors_api, path='/sensor')
-
-login_manager = LoginManager()
+# user_manager is kept at module scope so it can be looked up dynamically by the
+# request handlers (and overridden in tests).  api and login_manager are built
+# per-app inside create_app so that creating multiple apps in one process (e.g.
+# the test suite) does not re-register endpoints on a shared instance.
 user_manager = auth.UserManager()
 
 
@@ -56,10 +53,9 @@ def before_request():
         # Authorized:
         return
     # Not found:
-    return login_manager.unauthorized()
+    return current_app.login_manager.unauthorized()
 
 
-@login_manager.request_loader
 def load_user_from_request(request):
     """Authorize devices using HTTP basic auth."""
     auth_header = request.headers.get("Authorization")
@@ -90,101 +86,115 @@ def load_user_from_request(request):
     return None
 
 
-@login_manager.user_loader
 def user_loader(user_id):
     return user_manager.lookup_user(user_id)
 
 
-@api.route("/me")
-class Me(Resource):
-    """The currently logged-in user.
+def build_api():
+    """Build a fresh flask-restx Api with its namespaces and resources.
 
-    GET will return information about the user if a session exists.
-    POST will login a user given an ID token, and set a session cookie.
-    DELETE will log out the currently logged-in user.
+    A new Api is created per app so that constructing multiple apps in one
+    process does not re-register endpoints (e.g. the swagger ``specs`` view)
+    on a shared instance.
     """
+    api = Api(title="BoilerIO Heating Control",
+              description="Partially migrated to restplus: some APIs are not "
+                          "included here.")
+    api.add_namespace(zones_api, path='/zones')
+    api.add_namespace(sensors_api, path='/sensor')
 
     a_user = api.model("User", {
         'name': fields.String(description="The user's full name"),
         'picture': fields.Url(description="A URL to the profile image"),
     })
 
-    @api.response(200, 'Success', a_user)
-    @api.response(404, 'No user logged in')
-    def get(self):
-        if current_user.is_anonymous:
-            return '', 404
-        return jsonify({
-            'name': current_user.name,
-            'picture': current_user.profile_pic
-        })
+    class Me(Resource):
+        """The currently logged-in user.
 
-    @api.param(
-        'id_token', 'A JWT from the Google Sign-In SDK to be validated',
-        _in='formData'
-    )
-    @api.param(
-        'access_token', 'An access token to use on the Google userinfo endpoint',
-        _in='formData'
-    )
-    @api.response(200, 'Success', a_user)
-    @api.response(403, "Unauthorized")
-    @csrf_protection
-    def post(self):
-        access_token = request.form.get('access_token')
-        id_token = request.form.get('id_token')
-        if access_token is not None:
-            # Using an access token should be restricted to known clients,
-            # because it doesn't prevent injection of a token from
-            # authentication for a different purpose.  E.g. a malicious user
-            # could steal an access token exposed by another application and
-            # inject it here to authenticate against this application.
-            # However, this is the only way to support e.g. Alexa Account
-            # Linking since that does not provide ID tokens.
-            #
-            # Therefore, we require a client secret to be present and
-            # correct to identify the client as well as the user in this
-            # case.
-            db = get_db()
-            client_secret = request.form.get("client_secret")
-            if not (client_secret and model.client_secret_is_valid(db, client_secret)):
-                return 'Valid client secret required to use access token.', HTTPStatus.FORBIDDEN
-            try:
-                identity = google_token.get_idinfo_from_access_token(access_token)
-            except ValueError:
-                return 'Invalid credentials', HTTPStatus.FORBIDDEN
-        elif id_token is not None:
-            try:
-                identity = google_token.validate_id_token(
-                    id_token, current_app.config['GOOGLE_CLIENT_ID'])
-            except ValueError:
-                return 'Invalid credentials', HTTPStatus.FORBIDDEN
-        else:
-            return "No credentials provided", HTTPStatus.FORBIDDEN
+        GET will return information about the user if a session exists.
+        POST will login a user given an ID token, and set a session cookie.
+        DELETE will log out the currently logged-in user.
+        """
 
-        # Get the user info out of the validated identity
-        if ('sub' not in identity or
-                'name' not in identity or
-                'picture' not in identity):
-            return "Unexcpected authorization response", HTTPStatus.FORBIDDEN
+        @api.response(200, 'Success', a_user)
+        @api.response(404, 'No user logged in')
+        def get(self):
+            if current_user.is_anonymous:
+                return '', 404
+            return jsonify({
+                'name': current_user.name,
+                'picture': current_user.profile_pic
+            })
 
-        # This just adds a new user that hasn't been seen before and assumes it
-        # will work, but you could extend the logic to do something different
-        # (such as only allow known users, or somehow mark a user as new so
-        # your frontend can collect extra profile information).
-        user = user_manager.lookup_and_update_google_user(
-                identity['sub'], identity['name'], identity['email'],
-                identity['picture'])
-        if user is None:
-            return "Unauthorized user", HTTPStatus.FORBIDDEN
+        @api.param(
+            'id_token', 'A JWT from the Google Sign-In SDK to be validated',
+            _in='formData'
+        )
+        @api.param(
+            'access_token', 'An access token to use on the Google userinfo endpoint',
+            _in='formData'
+        )
+        @api.response(200, 'Success', a_user)
+        @api.response(403, "Unauthorized")
+        @csrf_protection
+        def post(self):
+            access_token = request.form.get('access_token')
+            id_token = request.form.get('id_token')
+            if access_token is not None:
+                # Using an access token should be restricted to known clients,
+                # because it doesn't prevent injection of a token from
+                # authentication for a different purpose.  E.g. a malicious user
+                # could steal an access token exposed by another application and
+                # inject it here to authenticate against this application.
+                # However, this is the only way to support e.g. Alexa Account
+                # Linking since that does not provide ID tokens.
+                #
+                # Therefore, we require a client secret to be present and
+                # correct to identify the client as well as the user in this
+                # case.
+                db = get_db()
+                client_secret = request.form.get("client_secret")
+                if not (client_secret and model.client_secret_is_valid(db, client_secret)):
+                    return 'Valid client secret required to use access token.', HTTPStatus.FORBIDDEN
+                try:
+                    identity = google_token.get_idinfo_from_access_token(access_token)
+                except ValueError:
+                    return 'Invalid credentials', HTTPStatus.FORBIDDEN
+            elif id_token is not None:
+                try:
+                    identity = google_token.validate_id_token(
+                        id_token, current_app.config['GOOGLE_CLIENT_ID'])
+                except ValueError:
+                    return 'Invalid credentials', HTTPStatus.FORBIDDEN
+            else:
+                return "No credentials provided", HTTPStatus.FORBIDDEN
 
-        # Authorize the user:
-        login_user(user, remember=True)
-        return self.get()
+            # Get the user info out of the validated identity
+            if ('sub' not in identity or
+                    'name' not in identity or
+                    'picture' not in identity):
+                return "Unexcpected authorization response", HTTPStatus.FORBIDDEN
 
-    def delete(self):
-        logout_user()
-        return "", 204
+            # This just adds a new user that hasn't been seen before and assumes
+            # it will work, but you could extend the logic to do something
+            # different (such as only allow known users, or somehow mark a user
+            # as new so your frontend can collect extra profile information).
+            user = user_manager.lookup_and_update_google_user(
+                    identity['sub'], identity['name'], identity['email'],
+                    identity['picture'])
+            if user is None:
+                return "Unauthorized user", HTTPStatus.FORBIDDEN
+
+            # Authorize the user:
+            login_user(user, remember=True)
+            return self.get()
+
+        def delete(self):
+            logout_user()
+            return "", 204
+
+    api.add_resource(Me, "/me", endpoint="me")
+    return api
 
 
 # --------------------------------------------------------------------------
@@ -379,8 +389,12 @@ def create_app(test_config=None):
     app.config.setdefault('REMEMBER_COOKIE_HTTPONLY', True)
     app.config.setdefault('REMEMBER_COOKIE_SAMESITE', 'Lax')
 
+    login_manager = LoginManager()
+    login_manager.request_loader(load_user_from_request)
+    login_manager.user_loader(user_loader)
     login_manager.init_app(app)
 
+    api = build_api()
     api_blueprint = Blueprint('api', __name__)
     api.init_app(api_blueprint)
 
