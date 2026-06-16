@@ -20,7 +20,7 @@ def get_idinfo_from_access_token(access_token: str) -> dict:
     session = Session()
     r = session.get(USERINFO_ENDPOINT, headers={
         'Authorization': 'Bearer ' + access_token
-    })
+    }, timeout=10)
     if r.status_code != 200:
         raise ValueError("Unexpected response code %d" % r.status_code)
     return r.json()

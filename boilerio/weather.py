@@ -21,7 +21,7 @@ def get_weather(apikey, city):
     """
     try:
         r = requests.get(WEATHER_API_ENDPOINT, params={
-            'q': city, 'apikey': apikey, 'units': 'metric'})
+            'q': city, 'apikey': apikey, 'units': 'metric'}, timeout=10)
     except requests.exceptions.ConnectionError as e:
         logger.error("Couldn't get weather: %s", e)
         raise

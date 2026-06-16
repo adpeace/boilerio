@@ -178,7 +178,7 @@ def get_url_with_fallback(fallback, url, auth):
     # First try to get from web service:
     result = None
 
-    r = requests.get(url, auth=auth)
+    r = requests.get(url, auth=auth, timeout=10)
     if r.status_code == 200:
         try:
             with open(fallback, 'w') as f:
