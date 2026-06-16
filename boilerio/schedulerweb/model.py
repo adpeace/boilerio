@@ -230,7 +230,6 @@ class Sensor(object):
         data = cursor.fetchone()
         if not data:
             raise ValueError("No sensor found (%s)" % sensor_id)
-        data = data[0]
         return cls(sensor_id, data[0], data[1], data[2])
 
     def get_last_readings(self, connection) -> list[SensorReading]:
