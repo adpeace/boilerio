@@ -6,3 +6,4 @@ dist
 venv
 htmlcov
 __pycache__
+settings.cfg
