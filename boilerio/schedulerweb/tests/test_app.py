@@ -48,9 +48,31 @@ def client():
     yield flaskapp.test_client()
 
 
+@pytest.fixture
+def noauth_client():
+    flaskapp = app.create_app({
+        'GOOGLE_CLIENT_ID': TEST_CLIENT_ID,
+        'SECRET_KEY': 'not_the_real_one',
+        'LOGIN_DISABLED': True,
+    })
+    yield flaskapp.test_client()
+
+
 def test_cannot_login_with_no_id_token(client):
     rv = client.post('/me')
     assert rv.status_code == 403
+
+
+def test_version_route_requires_auth(client):
+    rv = client.get('/version')
+    assert rv.status_code == HTTPStatus.UNAUTHORIZED
+
+
+def test_version_route_returns_software_version(noauth_client):
+    from ..util import software_version
+    rv = noauth_client.get('/version')
+    assert rv.status_code == HTTPStatus.OK
+    assert rv.json == {'version': software_version()}
 
 
 class FakeUserManager(object):

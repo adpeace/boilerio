@@ -17,7 +17,7 @@ import basicauth
 from . import model, auth, google_token
 from .zones import a_device_state, api as zones_api
 from .sensors import api as sensors_api
-from .util import get_db, csrf_protection
+from .util import get_db, csrf_protection, software_version
 
 from ..scheduler import SchedulerTemperaturePolicy
 
@@ -228,6 +228,11 @@ def today_by_time_from_zones(today_by_zone):
     # Map times to strings in returned value:
     return [{'when': entry['when'].strftime('%H:%M'), 'zones': entry['zones']}
             for entry in today_by_time]
+
+@root.route("/version")
+def get_version():
+    return jsonify({'version': software_version()})
+
 
 @root.route("/summary")
 def get_summary():
