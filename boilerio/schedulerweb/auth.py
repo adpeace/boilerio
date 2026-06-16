@@ -68,8 +68,15 @@ class UserManager(object):
         return User(user.user_id, user.name, user.picture)
 
     def lookup_user(self, user_id):
-        """Lookup user by ID.  Returns User object."""
+        """Lookup user by ID.  Returns a User object, or None if not found.
+
+        Returning None (rather than raising) lets flask-login treat a
+        valid-but-stale session cookie (e.g. for a since-deleted user) as
+        unauthenticated instead of producing a 500.
+        """
         db = util.get_db()
         user = model.UserIdentity.lookup_user_by_internal_id(db, user_id)
+        if user is None:
+            return None
         return User(user.user_id, user.name, user.picture)
 

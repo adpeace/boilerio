@@ -1,3 +1,5 @@
+import functools
+
 from flask import g, current_app, request
 from http import HTTPStatus
 
@@ -26,6 +28,7 @@ def get_db():
 # Add this decorator to all mutating operations.
 def csrf_protection(fn):
     """Require that the X-Requested-With header is present."""
+    @functools.wraps(fn)
     def protected(*args, **kwargs):
         if 'X-Requested-With' in request.headers:
             return fn(*args, **kwargs)

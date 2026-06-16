@@ -3,6 +3,7 @@
 # should probably also be migrated to restplus.
 
 import datetime
+import hmac
 import logging
 
 from flask import Flask, jsonify, request, g, Blueprint, current_app
@@ -84,7 +85,7 @@ def load_user_from_request(request):
         return None
 
     hashed_password = auth.hash_password(password, endpoint.salt)
-    if hashed_password.decode() == endpoint.device_secret_hashed:
+    if hmac.compare_digest(hashed_password.decode(), endpoint.device_secret_hashed):
         return auth.Device()
     return None
 
@@ -312,6 +313,7 @@ def get_schedule():
         })
 
 @root.route("/schedule/new_entry", methods=["POST"])
+@csrf_protection
 def add_schedule_entry():
     db = get_db()
     zones = model.Zone.all_from_db(db)
@@ -334,6 +336,7 @@ def add_schedule_entry():
     return ''
 
 @root.route("/schedule/delete_entry", methods=["POST"])
+@csrf_protection
 def remove_schedule_entry():
     db = get_db()
     try:
@@ -364,6 +367,17 @@ def create_app(test_config=None):
         app.config.from_envvar('BOILERIO_SETTINGS')
 
     app.secret_key = app.config.get('SECRET_KEY')
+
+    # Harden the session and remember-me cookies.  This is a publicly
+    # accessible HTTPS site, so the cookies should never be sent over plain
+    # HTTP, should not be readable from JavaScript, and SameSite gives
+    # defence-in-depth against CSRF.
+    app.config.setdefault('SESSION_COOKIE_SECURE', True)
+    app.config.setdefault('SESSION_COOKIE_HTTPONLY', True)
+    app.config.setdefault('SESSION_COOKIE_SAMESITE', 'Lax')
+    app.config.setdefault('REMEMBER_COOKIE_SECURE', True)
+    app.config.setdefault('REMEMBER_COOKIE_HTTPONLY', True)
+    app.config.setdefault('REMEMBER_COOKIE_SAMESITE', 'Lax')
 
     login_manager.init_app(app)
 
