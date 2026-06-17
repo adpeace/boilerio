@@ -9,9 +9,9 @@ from . import config
 logging.basicConfig(level=logging.DEBUG)
 
 
-def on_connect(client, userdata, flags, rc):
-    if rc:
-        logging.error("Error connecting, rc %d", rc)
+def on_connect(client, userdata, flags, reason_code, properties):
+    if reason_code.is_failure:
+        logging.error("Error connecting: %s", reason_code)
         return
     logging.info("Subscribing to %s", userdata['demand_topic'])
     client.subscribe(userdata['demand_topic'])
@@ -47,7 +47,7 @@ def run(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
 
     userdata = {'demand_topic': demand_topic, 'command_queue': command_queue}
 
-    client = mqtt.Client(userdata=userdata)
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, userdata=userdata)
     client.username_pw_set(mqtt_user, mqtt_password)
     client.on_connect = on_connect
     client.on_message = on_message

@@ -161,9 +161,9 @@ class SchedulerTemperaturePolicy(object):
                 break
         return target
 
-def mqtt_on_connect(client, userdata, flags, rc):
-    if rc:
-        logger.error("Error connecting, rc %d", rc)
+def mqtt_on_connect(client, userdata, flags, reason_code, properties):
+    if reason_code.is_failure:
+        logger.error("Error connecting to MQTT: %s", reason_code)
         return
     for sensor in userdata['sensors'].values():
         client.subscribe(sensor.locator)
@@ -288,7 +288,7 @@ def main():
     sensors = construct_sensors(scheduler_url, auth)
     zone_info = load_zone_info(scheduler_url, auth)
 
-    mqttc = mqtt.Client(userdata={
+    mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, userdata={
         'conf': conf,
         'thermostat_schedule_change_topic':
             conf.get('heating', 'thermostat_schedule_change_topic'),

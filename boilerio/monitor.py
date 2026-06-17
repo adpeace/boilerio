@@ -158,14 +158,14 @@ def main():
     zones = scheduler.load_zone_info(scheduler_url, auth)
 
     # Connect to MQTT:
-    def mqtt_on_connect(client, userdata, flags, rc):
-        if rc:
-            logger.error("Error connecting to MQTT: rc %d", rc)
+    def mqtt_on_connect(client, userdata, flags, reason_code, properties):
+        if reason_code.is_failure:
+            logger.error("Error connecting to MQTT: %s", reason_code)
             return
         client.subscribe(conf.get('heating', 'info_basetopic') + '/#')
         for zone in zones:
             client.subscribe(zone.sensor)
-    mqttc = mqtt.Client()
+    mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     mqttc.username_pw_set(conf.get('mqtt', 'user'),
                           conf.get('mqtt', 'password'))
     mqttc.on_connect = mqtt_on_connect
