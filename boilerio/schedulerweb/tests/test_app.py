@@ -69,7 +69,7 @@ def test_version_route_requires_auth(client):
 
 
 def test_version_route_returns_software_version(noauth_client):
-    from ..util import software_version
+    from ...version import software_version
     rv = noauth_client.get('/version')
     assert rv.status_code == HTTPStatus.OK
     assert rv.json == {'version': software_version()}

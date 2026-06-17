@@ -17,7 +17,8 @@ import basicauth
 from . import model, auth, google_token
 from .zones import a_device_state, api as zones_api
 from .sensors import api as sensors_api
-from .util import get_db, csrf_protection, software_version
+from .util import get_db, csrf_protection
+from ..version import software_version
 
 from ..scheduler import SchedulerTemperaturePolicy
 

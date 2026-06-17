@@ -11,6 +11,7 @@ import paho.mqtt.client as mqtt
 from . import config
 from . import scheduler
 from . import weather
+from .version import software_version
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -141,6 +142,7 @@ class MqttMonitor(Monitor):
             self.boiler_on(now)
 
 def main():
+    logger.info("Starting boilerio monitor %s", software_version())
     conf = config.load_config()
 
     # Get zone information:

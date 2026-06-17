@@ -22,6 +22,7 @@ from . import tempsensor
 from . import update_sensor
 from . import weather
 from . import zones
+from .version import software_version
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -267,6 +268,7 @@ class AllZoneController(object):
                 controller.iteration(self.scheduler, now)
 
 def main():
+    logger.info("Starting boilerio scheduler %s", software_version())
     conf = config.load_config()
 
     # If the 'heating' section of the config has a 'scheduler_username' and

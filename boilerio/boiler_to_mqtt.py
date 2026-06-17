@@ -5,6 +5,7 @@ import paho.mqtt.client as mqtt
 import json
 import logging
 from . import config
+from .version import software_version
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -110,6 +111,7 @@ def run(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
 
 
 def main():
+    logging.info("Starting boilerio boiler_to_mqtt %s", software_version())
     parser = argparse.ArgumentParser(
         description='Interface between MQTT and serial-controlled '
                     'heating relay')
