@@ -1,5 +1,6 @@
 *.pyc
 .*
+!.github/
 *.egg-info
 build
 dist
