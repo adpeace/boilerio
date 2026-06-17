@@ -14,7 +14,7 @@ class SensorReading(object):
     relative_humidity: float
 
     def __str__(self):
-        return "<TempReading: %f deg C %f RH at %s>" % (self.temperature, self.relative_humidity, self.when)
+        return "<SensorReading: %f deg C %f RH at %s>" % (self.temperature, self.relative_humidity, self.when)
 
 
 class EmonTHSensor(object):
