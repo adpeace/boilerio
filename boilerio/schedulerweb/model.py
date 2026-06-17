@@ -1,6 +1,5 @@
 """ Interface to scheduler database. """
 
-import psycopg2
 import base64
 import datetime
 
@@ -11,6 +10,10 @@ def db_connect(host, db, user, pw):
     Returns a postgres database connection created using the provided
     credentials.
     """
+    # Imported lazily so the client-side daemons can import this module for its
+    # data classes without needing psycopg2 (a web-only dependency) installed.
+    import psycopg2
+
     connect_string = 'host={} dbname={} user={} password={}'.format(
         host, db, user, pw)
     conn = psycopg2.connect(connect_string)
