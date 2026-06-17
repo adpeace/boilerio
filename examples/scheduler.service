@@ -1,7 +1,6 @@
 [Unit]
 Description=Heating scheduler
 After=network.target
-Wants=maintaintemp.service
 
 [Service]
 ExecStart=/usr/local/bin/scheduler
