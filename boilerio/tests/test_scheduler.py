@@ -6,6 +6,7 @@ from .. import scheduler
 from ..schedulerweb import model
 import requests_mock
 import requests.exceptions
+import pytest
 
 EMPTY_SCHEDULE_RESPONSE = """{
    "schedule": {
@@ -35,6 +36,36 @@ def test_no_exception_if_request_fails():
         m.get("https://scheduler/api/schedule", status_code=401)
         zc = scheduler.AllZoneController('https://scheduler/api', None, [])
         zc.iteration(None)
+
+
+def test_cached_response_used_when_web_service_is_offline(monkeypatch, tmp_path):
+    def offline(*args, **kwargs):
+        raise requests.exceptions.ConnectionError("offline")
+
+    monkeypatch.setattr(scheduler.requests, 'get', offline)
+    backup = tmp_path / 'zones'
+    backup.write_text('[{"zone_id": 1}]')
+    assert scheduler.get_url_with_fallback(str(backup), 'https://scheduler/zones', None) == '[{"zone_id": 1}]'
+
+
+def test_zone_and_sensor_load_accept_cached_responses(monkeypatch):
+    def cached_response(fallback, url, auth):
+        if url.endswith('/zones'):
+            return '[{"zone_id": 1, "name": "living", "boiler_relay": "0x1", "sensor_id": 2}]'
+        return '[{"sensor_id": 2, "locator": "sensors/living"}]'
+
+    monkeypatch.setattr(scheduler, 'get_url_with_fallback', cached_response)
+    assert scheduler.load_zone_info('https://scheduler', None)[0].zone_id == 1
+    assert scheduler.construct_sensors('https://scheduler', None)[2].locator == 'sensors/living'
+
+
+def test_zone_and_sensor_load_raise_when_offline_without_cache(monkeypatch):
+    monkeypatch.setattr(scheduler, 'get_url_with_fallback',
+                        lambda fallback, url, auth: None)
+    with pytest.raises(scheduler.ZoneInfoUnavailable):
+        scheduler.load_zone_info('https://scheduler', None)
+    with pytest.raises(scheduler.ZoneInfoUnavailable):
+        scheduler.construct_sensors('https://scheduler', None)
 
 #
 # Scheduler policy tests

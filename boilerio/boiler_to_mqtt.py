@@ -1,6 +1,5 @@
 import argparse
 import serial
-import sys
 import paho.mqtt.client as mqtt
 import json
 import logging
@@ -56,7 +55,6 @@ def run(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
 
     client.loop_start()
     try:
-        sensor_filename = sys.argv[1]
         # Note that the timeout of 0.5s allows time between commands being
         # sent/received
         with serial.Serial(sensor_filename, 57600, timeout=0.5) as sensor_file:

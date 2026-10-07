@@ -41,6 +41,29 @@ $ pip3 install .
 Use `-e` to `pip` to install in development mode (i.e. just link to the
 checked-out source instead of installing it).
 
+### Container image for the Raspberry Pi
+
+Build from this directory with `docker build -t boilerio:local .` on the Pi, or
+build a `linux/arm64` image with Docker Buildx. The image uses Python 3.13 and
+installs the locked core dependencies from `uv.lock`; it does not install the
+web or test extras. It runs as UID/GID 10001 and starts `scheduler` by default.
+
+Mount the host configuration file at `/etc/sensors/config` read-only. The
+scheduler also needs a writable mount at `/var/lib/boilerio` for its last-known
+zone and sensor data, so it can restart while the web service is unavailable.
+Give UID 10001 write access to this directory on the host. Set `TZ` to an
+installed timezone such as `Europe/London` for local heating schedule times.
+The configuration must include the `[mqtt]`, `[heating]`, and `[weather]`
+sections; the scheduler requires `scheduler_url`,
+`thermostat_schedule_change_topic`, and weather `apikey` and `location` in
+addition to the MQTT and demand topic settings below.
+
+Run a second instance of the same image for the serial interface by overriding
+the command with `boiler_to_mqtt /dev/ttyUSB0` and mapping the transceiver into
+the container at that path. The container user also needs access to the
+device's group (for example, through Compose `group_add`). The serial worker
+needs the MQTT and heating topic settings, but does not use the scheduler cache.
+
 ### Raspberry Pi Quickstart to get MQTT-based on/off control working
 
 You can run these steps on a Raspberry Pi with a fresh SD card that has the Buster version of Raspbian.  You can ssh to the Raspberry Pi, then copy/paste these commands into the terminal.  You'll need a transceiver device such as a JeeLink with the `thermostat` firmware (available at https://github.com/adpeace/thermostat) plugged in to use this.
@@ -232,4 +255,8 @@ scheduler_db_password = imnottellingyou
 scheduler_url = https://your_url
 scheduler_username = your_user
 scheduler_password = imnottellingyou
+
+[weather]
+apikey = your_openweathermap_key
+location = London,UK
 ```

@@ -3,7 +3,6 @@
 """Operate heating schedule."""
 
 import sys
-import os
 import json
 import datetime
 from datetime import timedelta
@@ -177,37 +176,38 @@ def get_url_with_fallback(fallback, url, auth):
     are available."""
 
     # First try to get from web service:
-    result = None
-
-    r = requests.get(url, auth=auth, timeout=10)
-    if r.status_code == 200:
-        try:
-            with open(fallback, 'w') as f:
-                f.write(r.text)
-        except:
-            logger.warning("Unable to write backup zone file.")
-        result = r.text
+    try:
+        r = requests.get(url, auth=auth, timeout=10)
+    except requests.exceptions.RequestException as e:
+        logger.error("Couldn't retrieve %s from web service: %s; attempting fallback.",
+                     url, e)
     else:
-        # That failed, try to get from last backup:
-        logger.error("Couldn't retrieve %s from web servive, "
-                     "attempting fallback.", url)
-        if os.path.exists(fallback):
+        if r.status_code == 200:
             try:
-                with open(fallback, 'r') as f:
-                    result = f.read()
-            except:
-                logger.error("Couldn't retrive zones from backup.")
+                with open(fallback, 'w') as f:
+                    f.write(r.text)
+            except OSError:
+                logger.warning("Unable to write backup file %s.", fallback)
+            return r.text
+        logger.error("Couldn't retrieve %s from web service (status %d); "
+                     "attempting fallback.", url, r.status_code)
 
-    return result
+    try:
+        with open(fallback, 'r') as f:
+            return f.read()
+    except OSError:
+        logger.error("Couldn't read backup file %s.", fallback)
+        return None
 
 def load_zone_info(scheduler_url, auth):
     """Load zone information from service. """
     BOILERIO_ZONE_BACKUP_FILE = '/var/lib/boilerio/zones'
 
-    zones = json.loads(get_url_with_fallback(BOILERIO_ZONE_BACKUP_FILE,
-                                             scheduler_url + '/zones', auth))
-    if zones is None:
+    zone_data = get_url_with_fallback(BOILERIO_ZONE_BACKUP_FILE,
+                                      scheduler_url + '/zones', auth)
+    if zone_data is None:
         raise ZoneInfoUnavailable()
+    zones = json.loads(zone_data)
 
     return [model.Zone(z['zone_id'], z['name'], z['boiler_relay'], z['sensor_id'])
             for z in zones]
@@ -218,10 +218,11 @@ def construct_sensors(scheduler_url, auth):
     Return a diction of sensor_id -> EmonTHSensor object"""
     SENSOR_BACKUP_FILE = '/var/lib/boilerio/sensors'
 
-    sensors = json.loads(get_url_with_fallback(SENSOR_BACKUP_FILE,
-                                               scheduler_url + '/sensor/', auth))
-    if sensors is None:
+    sensor_data = get_url_with_fallback(SENSOR_BACKUP_FILE,
+                                        scheduler_url + '/sensor/', auth)
+    if sensor_data is None:
         raise ZoneInfoUnavailable()
+    sensors = json.loads(sensor_data)
 
     return {
         s['sensor_id']: tempsensor.EmonTHSensor(s['sensor_id'], s['locator'])
