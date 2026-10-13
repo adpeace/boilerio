@@ -13,7 +13,7 @@ jobs:
         # Keep in sync with PYTHON_VERSIONS in Makefile.
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
