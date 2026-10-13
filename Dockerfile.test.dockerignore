@@ -1,0 +1,10 @@
+# A separate context includes tests without sending local config or credentials.
+**
+!pyproject.toml
+!uv.lock
+!README.md
+!boilerio/
+!boilerio/**
+**/__pycache__
+**/*.pyc
+**/*.pyo

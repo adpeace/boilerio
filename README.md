@@ -41,10 +41,46 @@ $ pip3 install .
 Use `-e` to `pip` to install in development mode (i.e. just link to the
 checked-out source instead of installing it).
 
+### Running tests locally
+
+With Docker running and `make` installed, run from the repository root:
+
+```sh
+make test                          # Python 3.15
+make test PYTHON_VERSION=3.13       # One specific version
+make test-matrix                   # All versions in the GitHub Actions matrix
+make test TEST_ARGS='-q -k weather' # Pass arguments to pytest
+```
+
+The test image installs the locked `test` extra, including the web dependencies,
+and runs both test directories configured in `pyproject.toml`. Each Python
+version has its own image. Builds include your current source changes, reuse
+Docker's cache, and need network access to download images and dependencies on
+the first run. The matrix continues after a failure and returns a nonzero exit
+status if any version fails. No heating hardware, MQTT broker, or running
+PostgreSQL server is needed; the tests mock these integrations.
+
+`Dockerfile.test` has its own build context rules to include the tests. The
+Raspberry Pi runtime image below continues to exclude test dependencies.
+
+For a faster development loop without Docker, install a current release of
+[uv](https://docs.astral.sh/uv/getting-started/installation/) and use:
+
+```sh
+uv sync --locked --extra test
+uv run --no-sync pytest
+```
+
+The project's `.python-version` pins the default for `uv sync` and `uv run` to
+Python 3.14. To test another version, override it explicitly, for example with
+`uv sync --locked --extra test --python 3.15`, then `uv run --no-sync pytest`.
+Syncing replaces the local `.venv` when its interpreter changes. A normal
+`uv run` or `uv sync` will restore the pinned default.
+
 ### Container image for the Raspberry Pi
 
 Build from this directory with `docker build -t boilerio:local .` on the Pi, or
-build a `linux/arm64` image with Docker Buildx. The image uses Python 3.13 and
+build a `linux/arm64` image with Docker Buildx. The image uses Python 3.14 and
 installs the locked core dependencies from `uv.lock`; it does not install the
 web or test extras. It runs as UID/GID 10001 and starts `scheduler` by default.
 

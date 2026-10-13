@@ -1,6 +1,7 @@
 *.pyc
 .*
 !.dockerignore
+!.python-version
 !.github/
 *.egg-info
 build
