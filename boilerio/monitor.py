@@ -162,6 +162,7 @@ def main():
         auth = None
     scheduler_url = conf.get('heating', 'scheduler_url')
     zones = scheduler.load_zone_info(scheduler_url, auth)
+    sensors = scheduler.construct_sensors(scheduler_url, auth)
 
     # Connect to MQTT:
     def mqtt_on_connect(client, userdata, flags, reason_code, properties):
@@ -170,7 +171,7 @@ def main():
             return
         client.subscribe(conf.get('heating', 'info_basetopic') + '/#')
         for zone in zones:
-            client.subscribe(zone.sensor)
+            client.subscribe(sensors[zone.sensor_id].locator)
     mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     mqttc.username_pw_set(conf.get('mqtt', 'user'),
                           conf.get('mqtt', 'password'))
@@ -191,7 +192,7 @@ def main():
     monitors = [
         MqttMonitor(
             mqttc, conf.get('heating', 'info_basetopic') + '/0x' +
-            format(int(zone.boiler_relay, 0), 'X'), zone.sensor,
+            format(int(zone.boiler_relay, 0), 'X'), sensors[zone.sensor_id].locator,
             weather.Weather(conf.get('weather', 'apikey'),
                             conf.get('weather', 'location')),
             post_gradient_fn(zone.zone_id))
