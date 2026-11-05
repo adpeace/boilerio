@@ -1,6 +1,7 @@
 import json
 import datetime
 import logging
+import time
 from dataclasses import dataclass
 
 logging.basicConfig()
@@ -12,6 +13,7 @@ class SensorReading(object):
     when: datetime.datetime
     temperature: float
     relative_humidity: float
+    received_at: float  # Process-local monotonic seconds, never sent over the API.
 
     def __str__(self):
         return "<SensorReading: %f deg C %f RH at %s>" % (self.temperature, self.relative_humidity, self.when)
@@ -47,14 +49,11 @@ class EmonTHSensor(object):
             temp = float(data['temperature'])
             rh = float(data['humidity'])
 
-            # If the value didn't change, don't signal an update:
-            if self.reading and (
-                    temp == self.reading.temperature and
-                    rh == self.reading.relative_humidity):
+            previous = self.reading
+            self.reading = SensorReading(datetime.datetime.now(), temp, rh, time.monotonic())
+            # Receipt refreshes freshness even when values have not changed.
+            if previous and temp == previous.temperature and rh == previous.relative_humidity:
                 return
-
-            now = datetime.datetime.now()
-            self.reading = SensorReading(now, temp, rh)
         except Exception:
             logger.critical("Exception escaped from MQTT handler for %s",
                             str(self), exc_info=True)

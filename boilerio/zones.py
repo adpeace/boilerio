@@ -103,7 +103,7 @@ class ZoneController(object):
             logger.error("Couldn't update state (zone %d, url %s, data %s)",
                     self.zone.zone_id, url, str(self.reported_state))
 
-    def iteration(self, scheduler, now):
+    def iteration(self, scheduler, now, tick):
         """Update the zone.  Should be called once per second."""
         # Update target temperature by polling scheduler
         target = scheduler.target(now, self.zone.zone_id)
@@ -118,19 +118,19 @@ class ZoneController(object):
 
         # Update gradient table:
         if (self.last_gradient_table_update is None or
-                self.last_gradient_table_update + self.gradient_table_update_frequency < now):
+                self.last_gradient_table_update + self.gradient_table_update_frequency.total_seconds() < tick):
             r = requests.get(
                     self.scheduler_url + '/zones/%d/gradients' % self.zone.zone_id,
                     timeout=10, auth=self.scheduler_auth)
             if r.status_code == 200:
                 self.gradient_table = r.json()
-                self.last_gradient_table_update = now
+                self.last_gradient_table_update = tick
             else:
                 logger.error("Couldn't update gradients table for zone %d (status %d)",
                         self.zone.zone_id, r.status_code)
 
         # Update thermostat:
-        self.thermostat.interval_elapsed(now)
+        self.thermostat.interval_elapsed(tick)
 
         # Update weather:
         current_weather = self.weather.get_weather()

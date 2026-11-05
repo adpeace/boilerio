@@ -29,13 +29,13 @@ def test_no_exception_if_request_raises():
     with requests_mock.Mocker() as m:
         m.get("https://scheduler/api/schedule", exc=requests.exceptions.Timeout)
         zc = scheduler.AllZoneController('https://scheduler/api', None, [])
-        zc.iteration(None)
+        zc.iteration(None, 0)
 
 def test_no_exception_if_request_fails():
     with requests_mock.Mocker() as m:
         m.get("https://scheduler/api/schedule", status_code=401)
         zc = scheduler.AllZoneController('https://scheduler/api', None, [])
-        zc.iteration(None)
+        zc.iteration(None, 0)
 
 
 def test_cached_response_used_when_web_service_is_offline(monkeypatch, tmp_path):

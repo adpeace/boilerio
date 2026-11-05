@@ -14,7 +14,7 @@ class MockSensor:
         self.callback = callback
 
     def update(self, when, temp, humidity):
-        self.reading = SensorReading(when, temp, humidity)
+        self.reading = SensorReading(when, temp, humidity, 0)
         self.callback(self)
 
 def test_adding_sensor_register_a_callback():

@@ -10,7 +10,9 @@ fitting.
 import argparse
 import datetime
 import random
-from boilerio.thermostat import Thermostat, TempReading
+from types import SimpleNamespace
+from boilerio.thermostat import Thermostat
+from boilerio.tempsensor import SensorReading
 
 RAD_RAMPUP_TIME = 6
 RAD_RAMPDOWN_TIME = 25
@@ -73,7 +75,8 @@ def run_simulation(start_temp, target_temp, sim_duration_mins,
                    randomness):
     house = House(start_temp)
     boiler = FakeBoiler(house)
-    thermostat = Thermostat(boiler)
+    sensor = SimpleNamespace(reading=None)
+    thermostat = Thermostat(boiler, sensor)
     thermostat.set_target_temperature(target_temp)
 
     # Start time doesn't really matter:
@@ -92,14 +95,14 @@ def run_simulation(start_temp, target_temp, sim_duration_mins,
         boiler_on = 0
         for _ in range(60):
             now = now + datetime.timedelta(0, 1)
-            thermostat.interval_elapsed(now)
+            thermostat.interval_elapsed((now - start).total_seconds())
             boiler_on += 1 if house.heating_on else 0
         house.tick()
         if randomness:
             room_temp_with_error = house.room_temp - 0.05 + 0.1 * random.random()
         else:
             room_temp_with_error = house.room_temp
-        thermostat.update_temperature(TempReading(now, room_temp_with_error))
+        sensor.reading = SensorReading(now, room_temp_with_error, 0, (now - start).total_seconds())
         print((now - start).total_seconds() / 60, target_temp, boiler_on,
               thermostat._pwm_control.dutycycle, house.room_temp, room_temp_with_error,
               thermostat._pid.last_prop, thermostat._pid.error_integral,

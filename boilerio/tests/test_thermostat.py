@@ -33,24 +33,24 @@ def thermostat(boiler, sensor):
     yield Thermostat(boiler, sensor)
 
 def test_start_off_if_above_temperature(thermostat, boiler, sensor):
-    now = datetime.datetime.now()
-    temp_reading = SensorReading(now, 20, 60)
+    now = 10000.0
+    temp_reading = SensorReading(datetime.datetime.now(), 20, 60, now)
     sensor.set_temp(temp_reading)
     thermostat.set_target_temperature(15)
     thermostat.interval_elapsed(now)
     assert boiler.last_command == 'X'
 
 def test_start_on_if_below_temperature(thermostat, boiler, sensor):
-    now = datetime.datetime.now()
-    temp_reading = SensorReading(now, 15, 60)
+    now = 10000.0
+    temp_reading = SensorReading(datetime.datetime.now(), 15, 60, now)
     sensor.set_temp(temp_reading)
     thermostat.set_target_temperature(20)
     thermostat.interval_elapsed(now)
     assert boiler.last_command == 'O'
 
 def test_start_pwn_if_at_temperature(thermostat, boiler, sensor):
-    now = datetime.datetime.now()
-    temp_reading = SensorReading(now, 20, 60)
+    now = 10000.0
+    temp_reading = SensorReading(datetime.datetime.now(), 20, 60, now)
     sensor.set_temp(temp_reading)
     thermostat.set_target_temperature(20)
     thermostat.interval_elapsed(now)
@@ -58,8 +58,8 @@ def test_start_pwn_if_at_temperature(thermostat, boiler, sensor):
     assert thermostat._measurement_begin == now
 
 def test_stale_temperature(thermostat, boiler, sensor):
-    now = datetime.datetime.now()
-    temp_reading = SensorReading(now - datetime.timedelta(0, 60 * 60), 15, 60)
+    now = 10000.0
+    temp_reading = SensorReading(datetime.datetime.now(), 15, 60, now - 3600)
     sensor.set_temp(temp_reading)
     thermostat.set_target_temperature(20)
     thermostat.interval_elapsed(now)

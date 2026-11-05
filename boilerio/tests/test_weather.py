@@ -46,17 +46,17 @@ def test_caching_weather_actually_caches():
     with requests_mock.Mocker() as m:
         m.get(weather.WEATHER_API_ENDPOINT, text=sample_good_output)
         caching_weather = weather.CachingWeather('apikey', 'Girton,GB', timedelta(hours=1))
-        now = datetime.datetime.now()
+        now = 0.0
 
         # Two requests within the cachign interval should return the same value, even if the online
         # content has changed:
         caching_weather.get_weather(now_fn=lambda: (now))
         m.get(weather.WEATHER_API_ENDPOINT, text=sample_good_output2)
-        r2 = caching_weather.get_weather(now_fn=lambda: (now + timedelta(minutes=1)))
+        r2 = caching_weather.get_weather(now_fn=lambda: (now + 60))
         assert r2 == sample_good_rv
 
         # Outside the caching interval, the new value should be returned:
-        r3 = caching_weather.get_weather(now_fn=lambda: (now + timedelta(hours=2)))
+        r3 = caching_weather.get_weather(now_fn=lambda: (now + 7200))
         assert r3 == sample_good_rv2
 
 

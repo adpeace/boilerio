@@ -43,9 +43,9 @@ class MqttBoiler(object):
         self.thermostat_id = thermostat_id
 
     def _command(self, cmd):
-        now = datetime.datetime.now()
+        now = time.monotonic()
         if cmd != self.last_cmd or \
-           self.last_cmd_time < now - self.REISSUE_TIMEOUT:
+           self.last_cmd_time < now - self.REISSUE_TIMEOUT.total_seconds():
             logger.debug("Issuing boiler command %s for relay %s", cmd, self.thermostat_id)
             self.mqttc.publish(self.zone_demand_topic, json.dumps({
                 'thermostat': self.thermostat_id,
@@ -245,11 +245,13 @@ class AllZoneController(object):
         self.auth = auth
         self.zone_controllers = zone_controllers
 
-    def iteration(self, now):
-        # Update schedule:
-        if self.last_scheduler_update:
-            next_scheduler_update = self.last_scheduler_update + self.SCHEDULER_UPDATE_INTERVAL
-        if self.scheduler is None or next_scheduler_update < now:
+    def iteration(self, now: datetime.datetime, tick: float) -> None:
+        """Perform one iteration of the control loop
+
+        :param datetime now: The current wall-clock time.
+        :param float tick: Monotonic time in seconds."""
+        if (self.scheduler is None or
+                tick - self.last_scheduler_update >= self.SCHEDULER_UPDATE_INTERVAL.total_seconds()):
             try:
                 r = requests.get(self.scheduler_url + "/schedule",
                                  auth=self.auth, timeout=10)
@@ -260,13 +262,13 @@ class AllZoneController(object):
                     logger.error("Couldn't get schedule (%d)",
                                  r.status_code)
                 else:
-                    self.last_scheduler_update = now
+                    self.last_scheduler_update = tick
                     self.scheduler = SchedulerTemperaturePolicy.from_json(r.text)
 
         # Update thermostats:
         if self.scheduler:
             for controller in self.zone_controllers:
-                controller.iteration(self.scheduler, now)
+                controller.iteration(self.scheduler, now, tick)
 
 def main():
     logger.info("Starting boilerio scheduler %s", software_version())
@@ -329,7 +331,7 @@ def main():
     # Update thermostats every second and schedule every 60s:
     controller = AllZoneController(scheduler_url, auth, zone_controllers)
     while True:
-        controller.iteration(datetime.datetime.now())
+        controller.iteration(datetime.datetime.now(), time.monotonic())
         time.sleep(1)
 
     mqttc.loop_stop()

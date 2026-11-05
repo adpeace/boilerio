@@ -1,6 +1,5 @@
 import datetime
 import logging
-import time
 
 from boilerio import pid, pwm
 
@@ -91,9 +90,9 @@ class Thermostat(object):
     def interval_elapsed(self, now):
         """Act on time interval passing.
 
-        now: the current datetime"""
+        now: process-local monotonic seconds"""
         if (self._sensor.reading is None or self._target is None or
-                self._sensor.reading.when < (now - self.STALE_PERIOD)):
+                self._sensor.reading.received_at < (now - self.STALE_PERIOD.total_seconds())):
             # Reading is stale: turn off the boiler:
             self._update_state(self.MODE_STALE, 0)
             self._boiler.off()
@@ -106,7 +105,7 @@ class Thermostat(object):
             # Reading is valid and within the target range:
             # New measurement cycle?
             if (self._measurement_begin is None or
-                    self._measurement_begin + self.PWM_PERIOD < now):
+                    self._measurement_begin + self.PWM_PERIOD.total_seconds() < now):
                 self._measurement_begin = now
                 # Adjust duty cycle:
                 pid_output = self._pid.update(self._sensor.reading.temperature)
@@ -119,7 +118,7 @@ class Thermostat(object):
                 logger.debug("New measurement cycle started")
 
             self._update_state(self.MODE_PWM, self._pwm_control.dutycycle)
-            self._pwm_control.update(time.monotonic())
+            self._pwm_control.update(now)
         elif self._sensor.reading.temperature > self._target.target_zone_max:
             # Reading is valid and above the target range:
             self._update_state(self.MODE_OFF, 0)

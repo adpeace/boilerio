@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
-from datetime import timedelta, datetime
+from datetime import datetime
+
 import logging
+import time
 import json
 import requests
 import requests.exceptions
@@ -18,6 +20,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 class Monitor(object):
+    """Measure elapsed heating rates; all `when` arguments are monotonic seconds."""
+
     CAPTURE_FIRST, CAPTURE_INTERVAL = list(range(2))
 
     def __init__(self, warmup_interval_s=600):
@@ -27,7 +31,7 @@ class Monitor(object):
         self._mode = self.CAPTURE_FIRST
         self._outside_temperature = None
         self._outside_temperature_time = None
-        self._warmup_interval = timedelta(seconds=warmup_interval_s)
+        self._warmup_interval = warmup_interval_s
 
     def set_outside_temperature(self, value, when):
         self._outside_temperature = value
@@ -58,20 +62,20 @@ class Monitor(object):
 
         # First temperature value captured: get one after the capture interval
         if (self._mode == self.CAPTURE_INTERVAL and
-            (when - self._first_temp_time > timedelta(minutes=10))):
+            (when - self._first_temp_time > 600)):
             delta_temp = temp - self._first_temp_recording
             delta_time = when - self._first_temp_time
-            delta_time_hours = delta_time.total_seconds() / 3600.0
+            delta_time_hours = delta_time / 3600.0
             self._mode = self.CAPTURE_FIRST
             return (self._first_temp_recording - self._outside_temperature,
                     delta_temp / delta_time_hours)
 
         logger.debug("Not yet after the capture interval (now: %s, last: %s, boiler on %s, mode %d).",
-                     'None' if when is None else when.strftime("%Y-%m-%dT%H:%M"),
+                     'None' if when is None else str(when),
                      'None' if self._first_temp_time is None else
-                        self._first_temp_time.strftime("%Y-%m-%dT%H:%M"),
+                        str(self._first_temp_time),
                      'None' if self._boiler_on_time is None else
-                        self._boiler_on_time.strftime("%Y-%m-%dT%H:%M"),
+                        str(self._boiler_on_time),
                      self._mode)
         return None
 
@@ -96,7 +100,7 @@ class MqttMonitor(Monitor):
         and the inside gradient when heating was on in degrees C per hour.
         """
         self.weather = weather
-        self.weather_update_interval = timedelta(seconds=weather_update_interval_s)
+        self.weather_update_interval = weather_update_interval_s
         self.gradient_callback_fn = gradient_callback_fn
 
         # Set up MQTT callbacks:
@@ -107,7 +111,7 @@ class MqttMonitor(Monitor):
 
     def mqtt_temperature_update(self, mqttc, userdata, msg):
         logger.debug("%s: %s", msg.topic, msg.payload)
-        now = datetime.now()
+        now = time.monotonic()
         data = json.loads(msg.payload)
 
         # Should we update the outside temperature?
@@ -130,11 +134,11 @@ class MqttMonitor(Monitor):
         r = self.temperature_update(temp, now)
         if r is not None:
             logger.info("%s: Temperature gradient result: %s", msg.topic, str(r))
-            self.gradient_callback_fn(now, r[0], r[1])
+            self.gradient_callback_fn(datetime.now(), r[0], r[1])
 
     def mqtt_relay_update(self, mqttc, userdata, msg):
         logger.debug("%s: %s", msg.topic, msg.payload)
-        now = datetime.now()
+        now = time.monotonic()
         data = json.loads(msg.payload)
         if data['cmd'] == 'OFF':
             self.boiler_off(now)
