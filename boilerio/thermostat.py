@@ -91,7 +91,7 @@ class Thermostat(object):
         """Act on time interval passing.
 
         now: process-local monotonic seconds"""
-        if (self._sensor.reading is None or self._target is None or
+        if (self._sensor.reading is None or self.target is None or
                 self._sensor.reading.received_at < (now - self.STALE_PERIOD.total_seconds())):
             # Reading is stale: turn off the boiler:
             self._update_state(self.MODE_STALE, 0)
