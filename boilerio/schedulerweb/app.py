@@ -425,7 +425,9 @@ def create_app(test_config=None):
     api_blueprint = Blueprint('api', __name__)
     api.init_app(api_blueprint)
 
-    app.register_blueprint(apidoc, name="rightdocs", url_prefix=app.config.get('BASE_URL', '/'))
+    app.register_blueprint(apidoc, url_prefix=app.config.get('BASE_URL', '/'))
+    # Keep RESTX's template endpoint name, and skip its root-level registration.
+    app.extensions.setdefault('restx', {})['apidoc_registered'] = True
     api_blueprint.add_url_rule('/', 'doc', api.render_doc)
 
     app.teardown_appcontext(close_db)

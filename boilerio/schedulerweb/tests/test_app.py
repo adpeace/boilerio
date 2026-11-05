@@ -1,4 +1,5 @@
 import pytest
+import re
 from http import HTTPStatus
 from unittest.mock import patch
 from zoneinfo import ZoneInfoNotFoundError
@@ -219,3 +220,35 @@ def test_system_config_uses_api_base_url():
     schema = client.get('/api/swagger.json').json
     assert schema['basePath'] == '/api'
     assert '/system' in schema['paths']
+
+
+@pytest.mark.parametrize('prefix,mount', [
+    ('', ''), ('/api', ''), ('/heating/api', ''),
+    ('', '/heating/api'), ('/api', '/heating'),
+])
+def test_swagger_page_loads_assets_and_schema_under_api_prefix(prefix, mount):
+    client = app.create_app({'HEATING_TIMEZONE': 'UTC', 'LOGIN_DISABLED': True,
+                            'BASE_URL': prefix}).test_client()
+    environ = {'SCRIPT_NAME': mount}
+    public_prefix = mount + prefix
+    response = client.get(prefix + '/', environ_overrides=environ)
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assets = re.findall(r'(?:src|href)="([^"]+)"', html)
+    assert assets
+    for asset_url in assets:
+        assert asset_url.startswith(public_prefix + '/swaggerui/')
+        asset = client.get(asset_url[len(mount):], environ_overrides=environ)
+        assert asset.status_code == 200
+        asset.close()
+    assert f'url: "{public_prefix}/swagger.json"' in html
+    schema = client.get(prefix + '/swagger.json', environ_overrides=environ)
+    assert schema.status_code == 200
+    assert schema.json['basePath'] == (public_prefix or '/')
+
+
+def test_prefixed_swagger_page_assets_and_schema_require_authentication():
+    client = app.create_app({'HEATING_TIMEZONE': 'UTC', 'SECRET_KEY': 'test',
+                            'BASE_URL': '/heating/api'}).test_client()
+    for path in ('/', '/swagger.json', '/swaggerui/swagger-ui-bundle.js'):
+        assert client.get('/heating/api' + path).status_code == 401
