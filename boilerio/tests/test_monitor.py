@@ -4,6 +4,7 @@ from boilerio.tempsensor import EmonTHSensor
 from configparser import RawConfigParser
 from types import SimpleNamespace
 from unittest.mock import Mock
+import pytest
 
 def test_none_to_on_transition_no_reading():
     """Test that when the boiler turns on for the first time that
@@ -65,3 +66,22 @@ def test_main_reaches_mqtt_loop_with_zone_sensor_id(monkeypatch):
     monitor.main()
 
     mqtt.loop_forever.assert_called_once()
+
+
+@pytest.mark.parametrize('ticks,expected_fetches', [
+    ([0, 1, 3599, 3600, 3601], [1, 1, 1, 2, 2]),
+    ([0, 7200, 7201], [1, 2, 2]),
+])
+def test_weather_refreshes_only_when_due_including_after_long_gaps(
+        monkeypatch, ticks, expected_fetches):
+    clock = iter(ticks)
+    monkeypatch.setattr(monitor.time, 'monotonic', lambda: next(clock))
+    weather = Mock()
+    weather.get_weather.return_value = {'temperature': 10}
+    worker = monitor.MqttMonitor(Mock(), 'relay', 'sensor', weather, Mock(),
+                                 weather_update_interval_s=3600)
+    message = SimpleNamespace(topic='sensor', payload='{"temperature": 20}')
+
+    for count in expected_fetches:
+        worker.mqtt_temperature_update(None, None, message)
+        assert weather.get_weather.call_count == count

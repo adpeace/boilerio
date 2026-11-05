@@ -117,7 +117,7 @@ class MqttMonitor(Monitor):
         # Should we update the outside temperature?
         # XXX using CachingWeather instead...
         if (self._outside_temperature is None or
-            now - self._outside_temperature_time < self.weather_update_interval):
+            now - self._outside_temperature_time >= self.weather_update_interval):
             try:
                 w = self.weather.get_weather()
                 logger.info("Updating weather information: %s", str(w))
