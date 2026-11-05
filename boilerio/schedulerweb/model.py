@@ -4,6 +4,13 @@ import base64
 import datetime
 
 
+def as_utc(value):
+    """Return an aware instant in UTC; never infer a timezone from the host."""
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("Timestamp must include a UTC offset")
+    return value.astimezone(datetime.timezone.utc)
+
+
 def db_connect(host, db, user, pw):
     """ Connect to database
 
@@ -96,7 +103,7 @@ class Zone(object):
 class TargetOverride(object):
     """ Override the set temperature for a period of time. """
     def __init__(self, end: datetime.datetime, temp: float, zone: int):
-        self.end = end
+        self.end = as_utc(end)
         self.temp = temp
         self.zone = zone
 
@@ -122,7 +129,7 @@ class TargetOverride(object):
     def to_dict(self):
         """Convert to a dictionary (for saving as JSON)."""
         return {
-            'until': self.end.strftime("%Y-%m-%dT%H:%M"),
+            'until': self.end.isoformat(),
             'temp': self.temp,
             'zone': self.zone,
             }
@@ -151,7 +158,7 @@ class DeviceState(object):
     """
     def __init__(self, received, zone_id, state, target, current_temp,
                  time_to_target, current_outside_temp, dutycycle):
-        self.received = received
+        self.received = as_utc(received)
         self.zone_id = zone_id
         self.state = state
         self.target = target
@@ -198,7 +205,7 @@ class SensorReading(object):
     """
     def __init__(self, sensor_id, when, metric_type, value):
         self.sensor_id = sensor_id
-        self.when = when
+        self.when = as_utc(when)
         self.metric_type = metric_type
         self.value = value
 
@@ -256,7 +263,7 @@ class TemperatureGradientMeasurement(object):
     """A record of a measured heating gradient."""
     def __init__(self, zone_id, when, delta, gradient):
         self.zone_id = zone_id
-        self.when = when
+        self.when = as_utc(when)
         self.delta = delta
         self.gradient = gradient
 

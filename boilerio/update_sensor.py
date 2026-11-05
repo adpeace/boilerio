@@ -21,7 +21,7 @@ class TempSensorUpdater(object):
     def _publish_updated_value(self, url: str, metric_type: str, when: datetime.datetime, value: float) -> None:
         data = {
             'metric_type': metric_type,
-            'when': when.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            'when': when.isoformat(),
             'value': value,
         }
 

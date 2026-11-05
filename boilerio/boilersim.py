@@ -80,7 +80,7 @@ def run_simulation(start_temp, target_temp, sim_duration_mins,
     thermostat.set_target_temperature(target_temp)
 
     # Start time doesn't really matter:
-    now = start = datetime.datetime(2000, 1, 1, 0, 0)
+    now = start = datetime.datetime(2000, 1, 1, tzinfo=datetime.timezone.utc)
     for minute in range(sim_duration_mins):
         # Compute time into day and determine if we need to change target:
         #day_minute = minute % (60 * 24)

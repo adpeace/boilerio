@@ -1,6 +1,7 @@
 import pytest
 from http import HTTPStatus
 from unittest.mock import patch
+from zoneinfo import ZoneInfoNotFoundError
 
 from .. import app
 from .. import auth
@@ -42,6 +43,7 @@ FAKE_USER_EXPECTED_RESPONSE = {
 @pytest.fixture
 def client():
     flaskapp = app.create_app({
+        'HEATING_TIMEZONE': 'Europe/London',
         'GOOGLE_CLIENT_ID': TEST_CLIENT_ID,
         'SECRET_KEY': 'not_the_real_one',
     })
@@ -51,6 +53,7 @@ def client():
 @pytest.fixture
 def noauth_client():
     flaskapp = app.create_app({
+        'HEATING_TIMEZONE': 'Europe/London',
         'GOOGLE_CLIENT_ID': TEST_CLIENT_ID,
         'SECRET_KEY': 'not_the_real_one',
         'LOGIN_DISABLED': True,
@@ -194,3 +197,25 @@ def test_incomplete_id_token_fails_login(client):
         # Log in with a "valid" token:
         rv = client.post('/me', data={'id_token': FAKE_ID_TOKEN})
         assert rv.status_code == HTTPStatus.FORBIDDEN
+
+
+@pytest.mark.parametrize('name,error', [(None, TypeError), ('', ValueError),
+                                         ('Invalid/Zone', ZoneInfoNotFoundError)])
+def test_app_requires_valid_system_timezone(name, error):
+    with pytest.raises(error):
+        app.create_app({'HEATING_TIMEZONE': name})
+
+
+def test_system_config_is_authenticated_and_contains_only_timezone(noauth_client, client):
+    assert noauth_client.get('/system').json == {'timezone': 'Europe/London'}
+    assert client.get('/system').status_code == 401
+
+
+def test_system_config_uses_api_base_url():
+    client = app.create_app({'HEATING_TIMEZONE': 'UTC', 'LOGIN_DISABLED': True,
+                            'BASE_URL': '/api'}).test_client()
+    assert client.get('/api/system').json == {'timezone': 'UTC'}
+    assert client.get('/system').status_code == 404
+    schema = client.get('/api/swagger.json').json
+    assert schema['basePath'] == '/api'
+    assert '/system' in schema['paths']

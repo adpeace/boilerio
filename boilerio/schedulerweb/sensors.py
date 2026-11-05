@@ -48,12 +48,16 @@ class SensorReadings(Resource):
     @api.expect(a_sensor_reading)
     @csrf_protection
     def post(self, sensor_id):
-        reading = model.SensorReading(
-            int(sensor_id),
-            datetime.datetime.strptime(api.payload['when'], '%Y-%m-%dT%H:%M:%S.%fZ'),
-            api.payload['metric_type'],
-            float(api.payload['value'])
-            )
+        try:
+            when = datetime.datetime.fromisoformat(api.payload['when'])
+            reading = model.SensorReading(
+                int(sensor_id),
+                when,
+                api.payload['metric_type'],
+                float(api.payload['value'])
+                )
+        except (ValueError, KeyError, TypeError):
+            return 'when must be an ISO timestamp with a UTC offset', 400
         db = get_db()
         reading.save(db)
         db.commit()

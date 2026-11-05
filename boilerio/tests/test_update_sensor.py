@@ -1,7 +1,7 @@
 from ..update_sensor import TempSensorUpdater
 from ..tempsensor import SensorReading
 from unittest.mock import MagicMock
-from datetime import datetime
+from datetime import datetime, timezone
 import requests_mock
 
 class MockSensor:
@@ -37,7 +37,7 @@ def test_sensor_update_causes_updates_to_be_published():
     # When: the temperature changes
     with requests_mock.Mocker() as m:
         m.post('http://foo/sensor/1/readings', status_code=200)
-        sensor.update(datetime.now(), 15.0, 50.0)
+        sensor.update(datetime.now(timezone.utc), 15.0, 50.0)
 
         # Then: the update is posted to the backend
         assert m.call_count == 2
@@ -51,7 +51,16 @@ def test_sensor_update_doesnt_leak_exception_on_failed_post():
     # When: the temperature changes
     with requests_mock.Mocker() as m:
         m.post('http://foo/sensor/1/readings', status_code=401)
-        sensor.update(datetime.now(), 15.0, 50.0)
+        sensor.update(datetime.now(timezone.utc), 15.0, 50.0)
 
         # Then: the update is posted to the backend
         assert m.called
+
+
+def test_sensor_upload_keeps_offset_and_microseconds():
+    updater = TempSensorUpdater('http://foo', None)
+    when = datetime.fromisoformat('2026-07-01T12:34:56.123456+01:00')
+    with requests_mock.Mocker() as m:
+        m.post('http://foo/sensor/1/readings', status_code=200)
+        updater._publish_updated_value('http://foo/sensor/1/readings', 'temperature', when, 20)
+        assert m.last_request.json()['when'] == '2026-07-01T12:34:56.123456+01:00'

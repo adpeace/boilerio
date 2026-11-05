@@ -4,6 +4,7 @@
 
 import sys
 import json
+from zoneinfo import ZoneInfo
 import datetime
 from datetime import timedelta
 import logging
@@ -65,17 +66,18 @@ class ZoneInfoUnavailable(Exception):
 class SchedulerTemperaturePolicy(object):
     ENTRY_TARGET_OVERRIDE = -2
 
-    def __init__(self, schedule, tgt_override):
+    def __init__(self, schedule, tgt_override, heating_timezone):
         """Initialise policy object from FullSchedule and override.
 
         Note that FullSchedule is basically a wrapper around a list but
         requires that the entries are sorted by day then time then zone.
         """
+        self.heating_timezone = heating_timezone
         self.schedule = schedule
         self.target_override = tgt_override
 
     @classmethod
-    def from_json(cls, j):
+    def from_json(cls, j, heating_timezone):
         data = json.loads(j)
 
         entries = []
@@ -91,11 +93,11 @@ class SchedulerTemperaturePolicy(object):
         schedule = model.FullSchedule(entries)
         tgt_override = data['target_override']
         tgt_override = [
-            model.TargetOverride(strptime(t['until'], "%Y-%m-%dT%H:%M"),
+            model.TargetOverride(datetime.datetime.fromisoformat(t['until']),
                                  t['temp'], t['zone'])
             for t in tgt_override
             ]
-        return cls(schedule, tgt_override)
+        return cls(schedule, tgt_override, heating_timezone)
 
     def get_day(self, day, zone):
         """Determine the schedule for today covering the full 24h.
@@ -147,8 +149,9 @@ class SchedulerTemperaturePolicy(object):
                 if override.zone == zone and override.end > now:
                     return override.temp
 
-        day_schedule = self.get_day(now.weekday(), zone)
-        now_time = now.time()
+        local_now = now.astimezone(self.heating_timezone)
+        day_schedule = self.get_day(local_now.weekday(), zone)
+        now_time = local_now.time()
 
         # Iterate over the schedule finding the last entry with a lower time
         # than the requested time.  If we don't find one, we need the last
@@ -199,6 +202,14 @@ def get_url_with_fallback(fallback, url, auth):
         logger.error("Couldn't read backup file %s.", fallback)
         return None
 
+def load_system_timezone(scheduler_url, auth, cache_path='/var/lib/boilerio/system'):
+    """Load the configured timezone from the service or cache."""
+    data = get_url_with_fallback(cache_path, scheduler_url + '/system', auth)
+    if data is None:
+        raise ValueError("No heating timezone available from server or cache")
+    return ZoneInfo(json.loads(data)['timezone'])
+
+
 def load_zone_info(scheduler_url, auth):
     """Load zone information from service. """
     BOILERIO_ZONE_BACKUP_FILE = '/var/lib/boilerio/zones'
@@ -215,7 +226,7 @@ def load_zone_info(scheduler_url, auth):
 def construct_sensors(scheduler_url, auth):
     """Construct sensors from service.
 
-    Return a diction of sensor_id -> EmonTHSensor object"""
+    Return a dictionary of sensor_id -> EmonTHSensor object"""
     SENSOR_BACKUP_FILE = '/var/lib/boilerio/sensors'
 
     sensor_data = get_url_with_fallback(SENSOR_BACKUP_FILE,
@@ -237,7 +248,8 @@ class AllZoneController(object):
 
     SCHEDULER_UPDATE_INTERVAL = timedelta(seconds=60)
 
-    def __init__(self, scheduler_url, auth, zone_controllers):
+    def __init__(self, scheduler_url, auth, zone_controllers, heating_timezone):
+        self.heating_timezone = heating_timezone
         self.scheduler = None
         self.last_scheduler_update = None
 
@@ -263,7 +275,7 @@ class AllZoneController(object):
                                  r.status_code)
                 else:
                     self.last_scheduler_update = tick
-                    self.scheduler = SchedulerTemperaturePolicy.from_json(r.text)
+                    self.scheduler = SchedulerTemperaturePolicy.from_json(r.text, self.heating_timezone)
 
         # Update thermostats:
         if self.scheduler:
@@ -290,6 +302,8 @@ def main():
     else:
         scheduler_url = conf.get('heating', 'scheduler_url')
 
+    heating_timezone = load_system_timezone(scheduler_url, auth)
+    logger.info("Heating timezone: %s", heating_timezone.key)
     sensors = construct_sensors(scheduler_url, auth)
     zone_info = load_zone_info(scheduler_url, auth)
 
@@ -329,9 +343,9 @@ def main():
     mqttc.loop_start()
 
     # Update thermostats every second and schedule every 60s:
-    controller = AllZoneController(scheduler_url, auth, zone_controllers)
+    controller = AllZoneController(scheduler_url, auth, zone_controllers, heating_timezone)
     while True:
-        controller.iteration(datetime.datetime.now(), time.monotonic())
+        controller.iteration(datetime.datetime.now(datetime.timezone.utc), time.monotonic())
         time.sleep(1)
 
     mqttc.loop_stop()

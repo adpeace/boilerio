@@ -34,7 +34,7 @@ def thermostat(boiler, sensor):
 
 def test_start_off_if_above_temperature(thermostat, boiler, sensor):
     now = 10000.0
-    temp_reading = SensorReading(datetime.datetime.now(), 20, 60, now)
+    temp_reading = SensorReading(datetime.datetime.now(datetime.timezone.utc), 20, 60, now)
     sensor.set_temp(temp_reading)
     thermostat.set_target_temperature(15)
     thermostat.interval_elapsed(now)
@@ -42,7 +42,7 @@ def test_start_off_if_above_temperature(thermostat, boiler, sensor):
 
 def test_start_on_if_below_temperature(thermostat, boiler, sensor):
     now = 10000.0
-    temp_reading = SensorReading(datetime.datetime.now(), 15, 60, now)
+    temp_reading = SensorReading(datetime.datetime.now(datetime.timezone.utc), 15, 60, now)
     sensor.set_temp(temp_reading)
     thermostat.set_target_temperature(20)
     thermostat.interval_elapsed(now)
@@ -50,7 +50,7 @@ def test_start_on_if_below_temperature(thermostat, boiler, sensor):
 
 def test_start_pwn_if_at_temperature(thermostat, boiler, sensor):
     now = 10000.0
-    temp_reading = SensorReading(datetime.datetime.now(), 20, 60, now)
+    temp_reading = SensorReading(datetime.datetime.now(datetime.timezone.utc), 20, 60, now)
     sensor.set_temp(temp_reading)
     thermostat.set_target_temperature(20)
     thermostat.interval_elapsed(now)
@@ -59,7 +59,7 @@ def test_start_pwn_if_at_temperature(thermostat, boiler, sensor):
 
 def test_stale_temperature(thermostat, boiler, sensor):
     now = 10000.0
-    temp_reading = SensorReading(datetime.datetime.now(), 15, 60, now - 3600)
+    temp_reading = SensorReading(datetime.datetime.now(datetime.timezone.utc), 15, 60, now - 3600)
     sensor.set_temp(temp_reading)
     thermostat.set_target_temperature(20)
     thermostat.interval_elapsed(now)

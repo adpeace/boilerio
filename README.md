@@ -87,8 +87,9 @@ web or test extras. It runs as UID/GID 10001 and starts `scheduler` by default.
 Mount the host configuration file at `/etc/sensors/config` read-only. The
 scheduler also needs a writable mount at `/var/lib/boilerio` for its last-known
 zone and sensor data, so it can restart while the web service is unavailable.
-Give UID 10001 write access to this directory on the host. Set `TZ` to an
-installed timezone such as `Europe/London` for local heating schedule times.
+Give UID 10001 write access to this directory on the host. The heating timezone
+is obtained from the server's `/system` endpoint and cached here as `system`;
+container `TZ` does not determine heating schedule times.
 The configuration must include the `[mqtt]`, `[heating]`, and `[weather]`
 sections; the scheduler requires `scheduler_url`,
 `thermostat_schedule_change_topic`, and weather `apikey` and `location` in
@@ -129,6 +130,37 @@ the MQTT server details with your own.
 Now run `boiler_to_mqtt /dev/ttyUSB0` (replacing `/dev/ttyUSB0` with the location
 of the Danfoss transceiver device, e.g. your JeeLink; JeeLink will probably show
 up at that device name though if you don't have other USB devices connected).
+
+## Timestamp and timezone rules
+
+The web server is the authority for the heating system's calendar. Set the
+required `HEATING_TIMEZONE` to an IANA timezone identifier in the Python
+settings file selected by `BOILERIO_SETTINGS` (see `example-settings.cfg`):
+
+```python
+HEATING_TIMEZONE = "Europe/London"
+```
+
+Use an IANA timezone identifier, not a fixed seasonal offset or an abbreviation
+such as BST. Startup fails for a missing/invalid zone or unavailable timezone
+data. Python's `zoneinfo` uses installed system timezone data; install `tzdata`
+on hosts that do not already provide it. The scheduler image includes it.
+Keep timezone data up to date on the server and scheduler.
+
+An authenticated call to `GET /system` returns the configured timezone:
+
+```json
+{"timezone": "Europe/London"}
+```
+
+The scheduler will cache the response in case the server is later unavailable/temporarily offline.
+
+### Rules
+
+* Apart from the schedule times, all times in the API are handled as timezone-aware datetimes with offsets recorded.
+* The backend stores and returns these timestamps in UTC.
+* The API takes ISO-formatted datetimes with explicit offset (e.g. +00:00) as input and handles time offsets correctly.
+* Schedule times are timezoneless and interpreted by the device and backend in the heating timezone returned by GET /system.
 
 ## Overview
 

@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from unittest.mock import Mock
+from zoneinfo import ZoneInfo
 
 import requests_mock
 
@@ -9,7 +10,8 @@ from boilerio import scheduler, tempsensor
 
 
 def test_polling_uses_elapsed_seconds_and_keeps_policy_on_http_failure():
-    controller = scheduler.AllZoneController('http://scheduler', None, [])
+    controller = scheduler.AllZoneController('http://scheduler', None, [],
+                                            ZoneInfo('Europe/London'))
     with requests_mock.Mocker() as requests:
         requests.get('http://scheduler/schedule', json={'schedule': {}, 'target_override': []})
         controller.iteration(datetime(2026, 10, 25, 0, 59, 59), 0)

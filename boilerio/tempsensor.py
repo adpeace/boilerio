@@ -50,7 +50,7 @@ class EmonTHSensor(object):
             rh = float(data['humidity'])
 
             previous = self.reading
-            self.reading = SensorReading(datetime.datetime.now(), temp, rh, time.monotonic())
+            self.reading = SensorReading(datetime.datetime.now(datetime.timezone.utc), temp, rh, time.monotonic())
             # Receipt refreshes freshness even when values have not changed.
             if previous and temp == previous.temperature and rh == previous.relative_humidity:
                 return

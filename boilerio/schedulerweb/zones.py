@@ -47,7 +47,7 @@ class Override(Resource):
         # XXX we shouldn't be deciding on the server whether an override is
         # active since it doesn't tell us whether the device is implementing it
         # or not.  This should move to target/reported state model.
-        now = datetime.datetime.now()
+        now = datetime.datetime.now(datetime.timezone.utc)
         db = get_db()
         overrides = model.TargetOverride.from_db(db, [zone_id])
         if not overrides:
@@ -79,15 +79,18 @@ class Override(Resource):
                 secs += int(request.form['hours']) * 60 * 60
             if 'mins' in request.form:
                 secs += int(request.form['mins']) * 60
-            if not secs:
+            if secs <= 0:
                 return 'Must specify days, hours, or mins', 400
 
             duration = datetime.timedelta(0, secs)
             temp = float(request.form['temp'])
-        except ValueError:
+        except (ValueError, OverflowError):
             return '', 400
-        now = datetime.datetime.now()
-        end = now + duration
+        now = datetime.datetime.now(datetime.timezone.utc)
+        try:
+            end = now + duration
+        except OverflowError:
+            return 'Duration is too large', 400
 
         db = get_db()
         override = model.TargetOverride(end, temp, zone_id)
@@ -132,9 +135,13 @@ class Gradient(Resource):
     @api.expect(a_gradient_measurement)
     @csrf_protection
     def post(self, zone_id):
-        tgm = model.TemperatureGradientMeasurement(
-                zone_id, api.payload['when'], api.payload['delta'],
-                api.payload['gradient'])
+        try:
+            when = datetime.datetime.fromisoformat(api.payload['when'])
+            tgm = model.TemperatureGradientMeasurement(
+                    zone_id, when, api.payload['delta'],
+                    api.payload['gradient'])
+        except (ValueError, KeyError, TypeError):
+            return 'when must be an ISO timestamp with a UTC offset', 400
         db = get_db()
         tgm.save(db)
         db.commit()
@@ -174,7 +181,7 @@ class ReportedState(Resource):
     def post(self, zone_id):
         db = get_db()
         device_state = model.DeviceState(
-                datetime.datetime.now(),
+                datetime.datetime.now(datetime.timezone.utc),
                 zone_id, api.payload['state'], api.payload['target'],
                 api.payload['current_temp'], api.payload['time_to_target'],
                 api.payload['current_outside_temp'], api.payload['dutycycle'])

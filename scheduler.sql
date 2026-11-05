@@ -77,7 +77,7 @@ ALTER TABLE public.device ALTER COLUMN device_id ADD GENERATED ALWAYS AS IDENTIT
 
 CREATE TABLE public.device_reported_state (
     zone_id integer NOT NULL,
-    received timestamp without time zone NOT NULL,
+    received timestamp with time zone NOT NULL,
     state character varying(20),
     target double precision,
     current_temp double precision,
@@ -96,7 +96,7 @@ ALTER TABLE public.device_reported_state OWNER TO postgres;
 
 CREATE TABLE public.gradient_measurement (
     id integer NOT NULL,
-    "when" timestamp without time zone,
+    "when" timestamp with time zone,
     delta double precision,
     gradient double precision,
     zone integer NOT NULL
@@ -131,7 +131,7 @@ ALTER SEQUENCE public.gradient_measurement_id_seq OWNED BY public.gradient_measu
 --
 
 CREATE TABLE public.override (
-    until timestamp without time zone,
+    until timestamp with time zone,
     temp double precision,
     zone integer NOT NULL
 );
@@ -175,7 +175,7 @@ ALTER TABLE public.sensor OWNER TO postgres;
 CREATE TABLE public.sensor_reading (
     sensor_id integer NOT NULL,
     metric_type public.sensor_metric_type NOT NULL,
-    "time" timestamp without time zone NOT NULL,
+    "time" timestamp with time zone NOT NULL,
     value double precision
 );
 

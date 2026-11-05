@@ -3,6 +3,8 @@
 # should probably also be migrated to restplus.
 
 import datetime
+from zoneinfo import ZoneInfo
+
 import hmac
 import logging
 
@@ -103,6 +105,22 @@ def build_api():
                           "included here.")
     api.add_namespace(zones_api, path='/zones')
     api.add_namespace(sensors_api, path='/sensor')
+
+    system_config = api.model('SystemConfig', {
+        'timezone': fields.String(
+            required=True, description="IANA timezone for the heating schedule.",
+            example='Europe/London'),
+    })
+
+    class System(Resource):
+        """Read the heating system configuration."""
+
+        @api.marshal_with(system_config)
+        @api.response(401, 'Authentication required')
+        def get(self):
+            return {'timezone': current_app.extensions['heating_timezone'].key}
+
+    api.add_resource(System, '/system', endpoint='system')
 
     a_user = api.model("User", {
         'name': fields.String(description="The user's full name"),
@@ -237,7 +255,8 @@ def get_version():
 
 @root.route("/summary")
 def get_summary():
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    local_now = now.astimezone(current_app.extensions['heating_timezone'])
     db = get_db()
 
     schedule = model.FullSchedule.from_db(db)
@@ -249,7 +268,7 @@ def get_summary():
     target_overrides = model.TargetOverride.from_db(db)
 
     scheduler = SchedulerTemperaturePolicy(
-        schedule, target_overrides)
+        schedule, target_overrides, current_app.extensions['heating_timezone'])
 
     for zone in zones_summary:
         zid = zone['zone_id']
@@ -269,13 +288,13 @@ def get_summary():
         else:
             zone['target_override'] = None
 
-    today_by_zone = {z.zone_id: scheduler.get_day(now.weekday(), z.zone_id)
+    today_by_zone = {z.zone_id: scheduler.get_day(local_now.weekday(), z.zone_id)
                      for z in zones}
 
     db.commit()
     result = {
         'zones': zones_summary,
-        'server_day_of_week': now.weekday(),
+        'server_day_of_week': local_now.weekday(),
         'today': today_by_time_from_zones(today_by_zone),
         }
     return jsonify(result)
@@ -381,6 +400,8 @@ def create_app(test_config=None):
         app.config.from_mapping(test_config)
     else:
         app.config.from_envvar('BOILERIO_SETTINGS')
+
+    app.extensions['heating_timezone'] = ZoneInfo(app.config['HEATING_TIMEZONE'])
 
     app.secret_key = app.config.get('SECRET_KEY')
 

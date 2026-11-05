@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import logging
 import time
@@ -134,7 +134,7 @@ class MqttMonitor(Monitor):
         r = self.temperature_update(temp, now)
         if r is not None:
             logger.info("%s: Temperature gradient result: %s", msg.topic, str(r))
-            self.gradient_callback_fn(datetime.now(), r[0], r[1])
+            self.gradient_callback_fn(datetime.now(timezone.utc), r[0], r[1])
 
     def mqtt_relay_update(self, mqttc, userdata, msg):
         logger.debug("%s: %s", msg.topic, msg.payload)
@@ -192,8 +192,9 @@ def main():
 
     monitors = [
         MqttMonitor(
-            mqttc, conf.get('heating', 'info_basetopic') + '/0x' +
-            format(int(zone.boiler_relay, 0), 'X'), sensors[zone.sensor_id].locator,
+            mqttc, (conf.get('heating', 'info_basetopic') + '/0x' +
+                format(int(zone.boiler_relay, 0), 'X')),
+            sensors[zone.sensor_id].locator,
             weather.Weather(conf.get('weather', 'apikey'),
                             conf.get('weather', 'location')),
             post_gradient_fn(zone.zone_id))
