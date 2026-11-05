@@ -1,4 +1,3 @@
-import datetime
 import logging
 
 logging.basicConfig()
@@ -10,11 +9,10 @@ class PWM(object):
     def __init__(self, dutycycle, period, device):
         """Initialise PWM state.
 
-        dutycycle: a timedelate representing the time duration the device
-                   should be on (weird naming...).
-        period: the duration of a full cycle (on + off)
+        dutycycle: fraction of the period the device should be on.
+        period: a timedelta for a full cycle (on + off)
         device: an object implementing on and off methods."""
-        self.period = period
+        self.period = period.total_seconds()
         self.dutycycle = None
         self.setDutyCycle(dutycycle)
         self.active = False
@@ -24,17 +22,17 @@ class PWM(object):
     def setDutyCycle(self, dutycycle):
         if self.dutycycle != dutycycle:
             self.dutycycle = dutycycle
-            self.on_period = datetime.timedelta(0,
-                self.period.total_seconds() * dutycycle)
+            self.on_period = self.period * dutycycle
             self.periodBegin = None
 
     def update(self, now):
+        """Advance using process-local monotonic seconds."""
         # Begin new cycle?
         if self.periodBegin is None or \
            self.periodBegin + self.period <= now:
             logger.debug("Beginning PWM new cycle @ %s", str(now))
             self.periodBegin = now
-            self.active = self.on_period > datetime.timedelta(0, 0)
+            self.active = self.on_period > 0
             if self.active:
                 self.device.on()
             else:

@@ -1,5 +1,6 @@
 import datetime
 import logging
+import time
 
 from boilerio import pid, pwm
 
@@ -118,7 +119,7 @@ class Thermostat(object):
                 logger.debug("New measurement cycle started")
 
             self._update_state(self.MODE_PWM, self._pwm_control.dutycycle)
-            self._pwm_control.update(now)
+            self._pwm_control.update(time.monotonic())
         elif self._sensor.reading.temperature > self._target.target_zone_max:
             # Reading is valid and above the target range:
             self._update_state(self.MODE_OFF, 0)
