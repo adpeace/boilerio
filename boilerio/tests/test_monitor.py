@@ -5,6 +5,8 @@ from configparser import RawConfigParser
 from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
+from flask import Flask, request
+from boilerio.schedulerweb.util import csrf_protection
 
 def test_none_to_on_transition_no_reading():
     """Test that when the boiler turns on for the first time that
@@ -46,7 +48,8 @@ def test_boiler_already_on():
     assert m.temperature_update(23, t + 1320) == (11, 6.0)
 
 
-def test_main_reaches_mqtt_loop_with_zone_sensor_id(monkeypatch):
+@pytest.fixture
+def monitor_client(monkeypatch):
     config = RawConfigParser()
     config.read_dict({
         'heating': {'scheduler_url': 'https://scheduler', 'info_basetopic': 'heating/zone/info'},
@@ -60,6 +63,11 @@ def test_main_reaches_mqtt_loop_with_zone_sensor_id(monkeypatch):
     monkeypatch.setattr(monitor.scheduler, 'construct_sensors', load_sensors)
     mqtt = Mock()
     monkeypatch.setattr(monitor.mqtt, 'Client', Mock(return_value=mqtt))
+    return mqtt
+
+
+def test_main_reaches_mqtt_loop_with_zone_sensor_id(monitor_client):
+    mqtt = monitor_client
     mqtt.loop_forever.side_effect = lambda: mqtt.on_connect(
         mqtt, None, None, SimpleNamespace(is_failure=False), None)
 
@@ -85,3 +93,32 @@ def test_weather_refreshes_only_when_due_including_after_long_gaps(
     for count in expected_fetches:
         worker.mqtt_temperature_update(None, None, message)
         assert weather.get_weather.call_count == count
+
+
+def test_monitor_can_post_gradient_to_csrf_protected_endpoint(monkeypatch, monitor_client):
+    web = Flask(__name__)
+    measurements = []
+
+    @web.post('/zones/7/gradient_measurements')
+    @csrf_protection
+    def receive_gradient():
+        measurements.append(request.get_json())
+        return '', 200
+
+    client = web.test_client()
+    monkeypatch.setattr(monitor.requests, 'post',
+                        lambda url, json, headers=None, **kwargs:
+                        client.post(url, json=json, headers=headers))
+    monkeypatch.setattr(monitor.weather.Weather, 'get_weather',
+                        lambda self: {'temperature': 10})
+    monkeypatch.setattr(monitor.Monitor, 'temperature_update', lambda *args: (10, 2))
+    callbacks = {}
+    monitor_client.message_callback_add.side_effect = lambda topic, handler: callbacks.update({topic: handler})
+    monitor_client.loop_forever.side_effect = lambda: callbacks['sensors/living'](
+        None, None, SimpleNamespace(topic='sensors/living', payload='{"temperature": 20}'))
+
+    monitor.main()
+
+    assert len(measurements) == 1
+    assert measurements[0]['delta'] == 10
+    assert measurements[0]['gradient'] == 2

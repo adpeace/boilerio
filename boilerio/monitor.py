@@ -184,7 +184,8 @@ def main():
                     'gradient': gradient}
             r = requests.post(scheduler_url +
                     '/zones/%d/gradient_measurements' % zone_id,
-                    auth=auth, json=data, timeout=10)
+                    auth=auth, json=data, timeout=10,
+                    headers={'X-Requested-With': 'device'})
             logger.info("Posted gradient %s for zone %d, status code %d",
                     str(data), zone_id, r.status_code)
         return post_gradient
