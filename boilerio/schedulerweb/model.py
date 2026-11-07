@@ -288,7 +288,7 @@ class TemperatureGradientMeasurement(object):
         cursor.execute(
             "select round(2 * cast(delta as numeric), 0) / 2 as d, "
             "avg(gradient), count(gradient) "
-            "from gradient_measurement where zone=%s"
+            "from gradient_measurement where zone=%s "
             "group by d order by d", (zone_id,)
             )
         return [{

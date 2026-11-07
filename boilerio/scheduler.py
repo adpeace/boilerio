@@ -11,8 +11,6 @@ import logging
 import time
 
 import paho.mqtt.client as mqtt
-import requests
-import requests.exceptions
 from requests.auth import HTTPBasicAuth
 
 from .schedulerweb import model # XXX
@@ -22,6 +20,7 @@ from . import tempsensor
 from . import update_sensor
 from . import weather
 from . import zones
+from .cached_resource import CachedResource, get_url_with_fallback
 from .version import software_version
 
 logging.basicConfig()
@@ -172,36 +171,6 @@ def mqtt_on_connect(client, userdata, flags, reason_code, properties):
         client.subscribe(sensor.locator)
     client.subscribe(userdata['thermostat_schedule_change_topic'])
 
-def get_url_with_fallback(fallback, url, auth):
-    """Gets a URL and updates fallback file.
-
-    Uses fallback file if get request fails.  Returns None if no sources
-    are available."""
-
-    # First try to get from web service:
-    try:
-        r = requests.get(url, auth=auth, timeout=10)
-    except requests.exceptions.RequestException as e:
-        logger.error("Couldn't retrieve %s from web service: %s; attempting fallback.",
-                     url, e)
-    else:
-        if r.status_code == 200:
-            try:
-                with open(fallback, 'w') as f:
-                    f.write(r.text)
-            except OSError:
-                logger.warning("Unable to write backup file %s.", fallback)
-            return r.text
-        logger.error("Couldn't retrieve %s from web service (status %d); "
-                     "attempting fallback.", url, r.status_code)
-
-    try:
-        with open(fallback, 'r') as f:
-            return f.read()
-    except OSError:
-        logger.error("Couldn't read backup file %s.", fallback)
-        return None
-
 def load_system_timezone(scheduler_url, auth, cache_path='/var/lib/boilerio/system'):
     """Load the configured timezone from the service or cache."""
     data = get_url_with_fallback(cache_path, scheduler_url + '/system', auth)
@@ -248,10 +217,14 @@ class AllZoneController(object):
 
     SCHEDULER_UPDATE_INTERVAL = timedelta(seconds=60)
 
-    def __init__(self, scheduler_url, auth, zone_controllers, heating_timezone):
+    def __init__(self, scheduler_url, auth, zone_controllers, heating_timezone,
+                 schedule_cache_path=None):
         self.heating_timezone = heating_timezone
         self.scheduler = None
-        self.last_scheduler_update = None
+        self._schedule_resource = CachedResource(
+            scheduler_url + '/schedule', auth, schedule_cache_path,
+            parser=lambda text: SchedulerTemperaturePolicy.from_json(text, heating_timezone),
+            update_interval=self.SCHEDULER_UPDATE_INTERVAL)
 
         self.scheduler_url = scheduler_url
         self.auth = auth
@@ -262,20 +235,7 @@ class AllZoneController(object):
 
         :param datetime now: The current wall-clock time.
         :param float tick: Monotonic time in seconds."""
-        if (self.scheduler is None or
-                tick - self.last_scheduler_update >= self.SCHEDULER_UPDATE_INTERVAL.total_seconds()):
-            try:
-                r = requests.get(self.scheduler_url + "/schedule",
-                                 auth=self.auth, timeout=10)
-            except requests.exceptions.RequestException as e:
-                logger.error("Failed interval (%s)", str(e))
-            else:
-                if r.status_code != 200:
-                    logger.error("Couldn't get schedule (%d)",
-                                 r.status_code)
-                else:
-                    self.last_scheduler_update = tick
-                    self.scheduler = SchedulerTemperaturePolicy.from_json(r.text, self.heating_timezone)
+        self.scheduler = self._schedule_resource.get(tick)
 
         # Update thermostats:
         if self.scheduler:
@@ -337,13 +297,16 @@ def main():
         zone_thermostat = thermostat.Thermostat(zone_boiler, zone_sensor)
         zone_controller = zones.ZoneController(
             zone, zone_boiler, zone_sensor, zone_thermostat, scheduler_url,
-            auth, weather_obj)
+            auth, weather_obj,
+            gradient_table_cache_path='/var/lib/boilerio/gradients-%d' % zone.zone_id)
         zone_controllers.append(zone_controller)
 
     mqttc.loop_start()
 
     # Update thermostats every second and schedule every 60s:
-    controller = AllZoneController(scheduler_url, auth, zone_controllers, heating_timezone)
+    controller = AllZoneController(
+        scheduler_url, auth, zone_controllers, heating_timezone,
+        schedule_cache_path='/var/lib/boilerio/schedule')
     while True:
         controller.iteration(datetime.datetime.now(datetime.timezone.utc), time.monotonic())
         time.sleep(1)

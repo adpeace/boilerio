@@ -1,10 +1,24 @@
 from datetime import timedelta
+import json
 import logging
 import requests
+
+from .cached_resource import CachedResource
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+
+def parse_gradient_table(text):
+    table = json.loads(text)
+    if not isinstance(table, list) or any(
+            not isinstance(row, dict) or
+            not all(isinstance(row.get(field), (int, float))
+                    for field in ('delta', 'gradient'))
+            for row in table):
+        raise ValueError('Expected a list of numeric gradient measurements')
+    return table
 
 
 class ZoneController(object):
@@ -12,7 +26,8 @@ class ZoneController(object):
 
     def __init__(self, zone, boiler, sensor, thermostat_obj, scheduler_url,
                  auth, weather,
-                 gradient_table_update_frequency=timedelta(hours=1)):
+                 gradient_table_update_frequency=timedelta(hours=1),
+                 gradient_table_cache_path=None):
         """Initialize a zone controller.
 
         Note that the weather is updated on each iteration so the weather
@@ -37,8 +52,10 @@ class ZoneController(object):
         self.do_update_state = True
         self._sensor.add_callback(self.temperature_change)
         self.gradient_table = []
-        self.last_gradient_table_update = None
-        self.gradient_table_update_frequency = gradient_table_update_frequency
+        self._gradient_resource = CachedResource(
+            scheduler_url + '/zones/%d/gradients' % zone.zone_id,
+            auth, gradient_table_cache_path, parser=parse_gradient_table,
+            update_interval=gradient_table_update_frequency)
         self.weather = weather
 
     def thermostat_state_callback(self, new_state, dutycycle):
@@ -117,17 +134,9 @@ class ZoneController(object):
             self._update_state(target=target)
 
         # Update gradient table:
-        if (self.last_gradient_table_update is None or
-                self.last_gradient_table_update + self.gradient_table_update_frequency.total_seconds() < tick):
-            r = requests.get(
-                    self.scheduler_url + '/zones/%d/gradients' % self.zone.zone_id,
-                    timeout=10, auth=self.scheduler_auth)
-            if r.status_code == 200:
-                self.gradient_table = r.json()
-                self.last_gradient_table_update = tick
-            else:
-                logger.error("Couldn't update gradients table for zone %d (status %d)",
-                        self.zone.zone_id, r.status_code)
+        table = self._gradient_resource.get(tick)
+        if table is not None:
+            self.gradient_table = table
 
         # Update thermostat:
         self.thermostat.interval_elapsed(tick)

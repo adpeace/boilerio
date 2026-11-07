@@ -4,6 +4,7 @@
 from datetime import time, datetime, timedelta, timezone
 import json
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from unittest.mock import Mock
 
 from .. import scheduler
 from ..schedulerweb import model
@@ -48,11 +49,69 @@ def test_no_exception_if_request_fails():
         zc.iteration(None, 0)
 
 
+@pytest.mark.parametrize('failure', [
+    {'status_code': 500}, {'status_code': 401},
+    {'exc': requests.exceptions.Timeout},
+    {'exc': requests.exceptions.ConnectionError},
+    {'text': 'invalid json'}, {'json': {}},
+    {'json': {'schedule': None, 'target_override': []}},
+])
+@pytest.mark.parametrize('cached', [False, True])
+def test_failed_schedule_fetch_is_throttled_and_retains_policy(failure, cached):
+    zone = Mock()
+    controller = scheduler.AllZoneController(
+        'https://scheduler/api', None, [zone], LONDON)
+    url = 'https://scheduler/api/schedule'
+    with requests_mock.Mocker() as http:
+        if cached:
+            http.get(url, text=EMPTY_SCHEDULE_RESPONSE)
+            controller.iteration(None, 0)
+            start = 60
+        else:
+            start = 0
+        policy = controller.scheduler
+        http.get(url, **failure)
+        http.reset_mock()
+        zone.reset_mock()
+        for tick in range(start, start + 120):
+            controller.iteration(None, tick)
+            assert http.call_count == (1 if tick < start + 60 else 2)
+            assert controller.scheduler is policy
+        assert zone.iteration.call_count == (120 if cached else 0)
+
+        http.get(url, text=EMPTY_SCHEDULE_RESPONSE)
+        controller.iteration(None, start + 120)
+        assert http.call_count == 3
+        assert controller.scheduler is not None
+        zone.iteration.assert_called_with(controller.scheduler, None, start + 120)
+
+
+def test_offline_schedule_startup_preserves_override_expiry(tmp_path):
+    cache = tmp_path / 'schedule'
+    cache.write_text(json.dumps({
+        'schedule': {'0': [{'when': '00:00', 'zones': [{'zone': 1, 'temp': 18}]}]},
+        'target_override': [{'zone': 1, 'temp': 23, 'until': '2026-11-02T12:00:00+00:00'}],
+    }))
+    zone = Mock()
+    controller = scheduler.AllZoneController(
+        'https://scheduler/api', None, [zone], LONDON, schedule_cache_path=cache)
+    with requests_mock.Mocker() as http:
+        http.get('https://scheduler/api/schedule', status_code=500)
+        before = instant(2026, 11, 2, 11, 59, 59)
+        controller.iteration(before, 0)
+        assert controller.scheduler.target(before, 1) == 23
+        after = before + timedelta(seconds=1)
+        controller.iteration(after, 1)
+        assert controller.scheduler.target(after, 1) == 18
+        assert http.call_count == 1
+        zone.iteration.assert_called_with(controller.scheduler, after, 1)
+
+
 def test_cached_response_used_when_web_service_is_offline(monkeypatch, tmp_path):
     def offline(*args, **kwargs):
         raise requests.exceptions.ConnectionError("offline")
 
-    monkeypatch.setattr(scheduler.requests, 'get', offline)
+    monkeypatch.setattr(requests, 'get', offline)
     backup = tmp_path / 'zones'
     backup.write_text('[{"zone_id": 1}]')
     assert scheduler.get_url_with_fallback(

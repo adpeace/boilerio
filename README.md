@@ -86,10 +86,16 @@ web or test extras. It runs as UID/GID 10001 and starts `scheduler` by default.
 
 Mount the host configuration file at `/etc/sensors/config` read-only. The
 scheduler also needs a writable mount at `/var/lib/boilerio` for its last-known
-zone and sensor data, so it can restart while the web service is unavailable.
+zone, sensor, schedule, and gradient data, so it can restart while the web service
+is unavailable after a successful online run.
 Give UID 10001 write access to this directory on the host. The heating timezone
 is obtained from the server's `/system` endpoint and cached here as `system`;
 container `TZ` does not determine heating schedule times.
+The schedule is cached as `schedule` and each zone's gradients as `gradients-<id>`.
+Failed schedule and gradient fetches retry at most once per minute and retain the
+last valid data. Successful schedule fetches refresh every minute; gradients
+refresh hourly. Invalid responses do not replace these caches. Without a cached
+or online schedule, zone control waits until a schedule becomes available.
 The configuration must include the `[mqtt]`, `[heating]`, and `[weather]`
 sections; the scheduler requires `scheduler_url`,
 `thermostat_schedule_change_topic`, and weather `apikey` and `location` in

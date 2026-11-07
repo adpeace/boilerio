@@ -4,6 +4,24 @@ from datetime import timedelta, datetime
 
 from boilerio import zones
 
+
+def test_thermostat_updates_when_gradients_are_unavailable():
+    thermostat = MagicMock(target=20, is_heating=False)
+    weather = MagicMock()
+    weather.get_weather.return_value = {'temperature': 5}
+    controller = zones.ZoneController(
+        MagicMock(zone_id=2), MagicMock(), MagicMock(), thermostat,
+        'https://scheduler/api', None, weather)
+    controller.report_updated_state = MagicMock()
+    policy = MagicMock()
+    policy.target.return_value = 20
+    policy.target_overridden.return_value = False
+    with requests_mock.Mocker() as http:
+        http.get('https://scheduler/api/zones/2/gradients', status_code=500)
+        controller.iteration(policy, None, 0)
+    thermostat.interval_elapsed.assert_called_once_with(0)
+
+
 def test_time_to_target_returns_None_until_initialized():
     with requests_mock.Mocker():
         boiler = MagicMock()
