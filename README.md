@@ -16,7 +16,7 @@ For more information, please see https://andyhacks.com.
 ## Sensor summary API
 
 Authenticated clients can fetch all configured sensors and their latest
-temperature and humidity readings in one request to `GET /sensor/summary`
+temperature, humidity, and battery voltage readings in one request to `GET /sensor/summary`
 (relative to the configured API base URL):
 
 ```json
@@ -26,18 +26,36 @@ temperature and humidity readings in one request to `GET /sensor/summary`
     "name": "Living room",
     "readings": {
       "temperature": {"value": 19.42, "when": "2026-07-01T11:34:56+00:00"},
-      "humidity": {"value": 48.0, "when": "2026-07-01T11:30:00+00:00"}
-    }
+      "humidity": {"value": 48.0, "when": "2026-07-01T11:30:00+00:00"},
+      "battery_voltage": {"value": 1.2, "when": "2026-07-01T11:34:56+00:00"}
+    },
+    "state": {"battery": "low"}
   },
-  {"sensor_id": 2, "name": "Bedroom", "readings": {}}
+  {"sensor_id": 2, "name": "Bedroom", "readings": {}, "state": {"battery": "unknown"}}
 ]
 ```
 
 Each metric has its own timestamp. Metrics without readings are omitted, and
 sensors without any readings are included with an empty `readings` object.
 An installation without sensors returns `[]`. The existing `GET /sensor/` and
-`GET /sensor/<id>/readings` responses are unchanged. No database migration is
-needed.
+`GET /sensor/<id>/readings` endpoints remain available; the latter also returns
+battery voltage when reported. No database migration is needed: the existing
+`battery_voltage` metric stores total pack voltage in volts.
+
+The summary derives `state.battery` as `low` at **2.0 V or below**, `ok` above
+that, or `unknown` if battery data is missing, invalid, or more than 30 minutes
+old. These thresholds are constants in `boilerio/schedulerweb/sensors.py`.
+The raw last reading and its timestamp remain available when stale.
+
+The emonTH MQTT adapter delivers temperature, humidity, and optional battery
+voltage together through one reading callback. The updater posts each metric
+when first received, when its value changes, or after 15 minutes unchanged
+(`REPORT_INTERVAL_SECONDS` in `boilerio/update_sensor.py`). The POST endpoint
+still accepts one metric per request.
+The interval uses monotonic receipt time and is tracked separately per sensor
+and metric after successful uploads. Refreshes require an actual MQTT report;
+a silent sensor's last reading is never re-posted. Invalid or missing battery
+fields do not refresh battery data or interrupt temperature updates.
 
 ## Installation
 

@@ -195,13 +195,13 @@ class DeviceState(object):
         return cls(data[0], zone_id, *data[1:])
 
 
-SENSOR_METRIC_TYPES = ['temperature', 'humidity']
+SENSOR_METRIC_TYPES = ['temperature', 'humidity', 'battery_voltage']
 
 
 class SensorReading(object):
     """Represents a single sensor reading.
 
-    metric_type is one of 'temperature', 'humidity'.
+    metric_type is one of 'temperature', 'humidity', 'battery_voltage'.
     """
     def __init__(self, sensor_id, when, metric_type, value):
         self.sensor_id = sensor_id

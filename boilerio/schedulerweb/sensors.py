@@ -1,10 +1,14 @@
 import datetime
+import math
 from flask_restx import Namespace, Resource, fields
 
 from . import model
 from .util import get_db, csrf_protection
 
 api = Namespace('Sensors', title="Sensor readings and management")
+
+BATTERY_LOW_VOLTAGE = 2.0
+BATTERY_STALE_PERIOD = datetime.timedelta(minutes=30)
 
 
 a_sensor = api.model("Sensor", {
@@ -43,11 +47,30 @@ a_latest_readings = api.model("Latest sensor readings", {
     for metric_type in model.SENSOR_METRIC_TYPES
 })
 
+a_sensor_state = api.model("Sensor state", {
+    'battery': fields.String(description="Battery warning status",
+                             enum=['low', 'ok', 'unknown']),
+})
+
 a_sensor_summary = api.model("Sensor summary", {
     'sensor_id': fields.Integer(description="Sensor ID"),
     'name': fields.String(description="Friendly name of sensor"),
     'readings': fields.Nested(a_latest_readings, skip_none=True),
+    'state': fields.Nested(a_sensor_state),
 })
+
+
+def valid_battery_voltage(value):
+    return value is not None and math.isfinite(value) and value >= 0
+
+
+def battery_status(reading, now):
+    """Interpret a voltage report without estimating remaining capacity."""
+    if reading is None or not valid_battery_voltage(reading.value):
+        return 'unknown'
+    if now - reading.when > BATTERY_STALE_PERIOD:
+        return 'unknown'
+    return 'low' if reading.value <= BATTERY_LOW_VOLTAGE else 'ok'
 
 
 @api.route('/summary')
@@ -56,11 +79,17 @@ class SensorSummary(Resource):
     @api.marshal_list_with(a_sensor_summary)
     def get(self):
         summaries = {}
+        now = datetime.datetime.now(datetime.timezone.utc)
         for sensor_id, name, reading in model.Sensor.latest_readings_from_db(get_db()):
             summary = summaries.setdefault(sensor_id, {
                 'sensor_id': sensor_id, 'name': name, 'readings': {},
+                'state': {'battery': 'unknown'},
             })
             if reading is not None:
+                if reading.metric_type == 'battery_voltage':
+                    summary['state']['battery'] = battery_status(reading, now)
+                    if not valid_battery_voltage(reading.value):
+                        continue
                 summary['readings'][reading.metric_type] = reading
         return list(summaries.values())
 
@@ -90,6 +119,8 @@ class SensorReadings(Resource):
                 )
         except (ValueError, KeyError, TypeError):
             return 'when must be an ISO timestamp with a UTC offset', 400
+        if reading.metric_type == 'battery_voltage' and not valid_battery_voltage(reading.value):
+            return 'battery_voltage must be a finite, non-negative number', 400
         db = get_db()
         reading.save(db)
         db.commit()

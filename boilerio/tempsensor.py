@@ -1,6 +1,7 @@
 import json
 import datetime
 import logging
+import math
 import time
 from dataclasses import dataclass
 
@@ -14,6 +15,7 @@ class SensorReading(object):
     temperature: float
     relative_humidity: float
     received_at: float  # Process-local monotonic seconds, never sent over the API.
+    battery_voltage: float | None = None
 
     def __str__(self):
         return "<SensorReading: %f deg C %f RH at %s>" % (self.temperature, self.relative_humidity, self.when)
@@ -45,22 +47,28 @@ class EmonTHSensor(object):
             data = json.loads(msg.payload)
             if 'temperature' not in data:
                 return
-
             temp = float(data['temperature'])
             rh = float(data['humidity'])
-
-            previous = self.reading
-            self.reading = SensorReading(datetime.datetime.now(datetime.timezone.utc), temp, rh, time.monotonic())
-            # Receipt refreshes freshness even when values have not changed.
-            if previous and temp == previous.temperature and rh == previous.relative_humidity:
-                return
         except Exception:
             logger.critical("Exception escaped from MQTT handler for %s",
                             str(self), exc_info=True)
+            return
 
-        # Call callbacks, making sure any escaping exceptions don't cause
-        # subsequent callbacks to fail:
-        logger.debug("Temperature update: %s", str(self.reading))
+        voltage = None
+        if 'battery' in data:
+            try:
+                voltage = float(data['battery'])
+                if not math.isfinite(voltage) or voltage < 0:
+                    raise ValueError("Invalid battery voltage")
+            except (ValueError, TypeError, OverflowError):
+                logger.warning("Ignoring invalid battery voltage for %s", self.locator)
+                voltage = None
+
+        # Refresh local readings on every report. The updater decides which
+        # values need uploading and when unchanged readings need re-reporting.
+        self.reading = SensorReading(datetime.datetime.now(datetime.timezone.utc),
+                                     temp, rh, time.monotonic(), voltage)
+        logger.debug("Sensor update: %s", str(self.reading))
         for cb in self._callbacks:
             try:
                 cb(self)

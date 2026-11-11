@@ -39,7 +39,7 @@ def test_unchanged_sensor_values_refresh_monotonic_freshness(monkeypatch):
     sensor._temp_callback(None, None, msg)
     assert sensor.reading.when == now
     assert sensor.reading.received_at == 100
-    callback.assert_called_once()
+    assert callback.call_count == 2
 
 
 def test_thermostat_freshness_uses_receipt_tick_not_sensor_wall_time():
