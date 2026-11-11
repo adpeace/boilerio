@@ -33,6 +33,38 @@ a_sensor_reading = api.model("Sensor reading", {
 })
 
 
+a_latest_reading = api.model("Latest sensor reading", {
+    'when': fields.DateTime(description="When the reading occurred"),
+    'value': fields.Float(description="The reading"),
+})
+
+a_latest_readings = api.model("Latest sensor readings", {
+    metric_type: fields.Nested(a_latest_reading, allow_null=True)
+    for metric_type in model.SENSOR_METRIC_TYPES
+})
+
+a_sensor_summary = api.model("Sensor summary", {
+    'sensor_id': fields.Integer(description="Sensor ID"),
+    'name': fields.String(description="Friendly name of sensor"),
+    'readings': fields.Nested(a_latest_readings, skip_none=True),
+})
+
+
+@api.route('/summary')
+class SensorSummary(Resource):
+    """All configured sensors with their latest readings, keyed by metric type."""
+    @api.marshal_list_with(a_sensor_summary)
+    def get(self):
+        summaries = {}
+        for sensor_id, name, reading in model.Sensor.latest_readings_from_db(get_db()):
+            summary = summaries.setdefault(sensor_id, {
+                'sensor_id': sensor_id, 'name': name, 'readings': {},
+            })
+            if reading is not None:
+                summary['readings'][reading.metric_type] = reading
+        return list(summaries.values())
+
+
 @api.route('/<int:sensor_id>/readings')
 class SensorReadings(Resource):
     @api.marshal_list_with(a_sensor_reading)

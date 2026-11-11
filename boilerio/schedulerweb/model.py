@@ -233,6 +233,37 @@ class Sensor(object):
         return [cls(r[0], r[1], r[2], r[3]) for r in data]
 
     @classmethod
+    def latest_readings_from_db(cls, connection):
+        """Return (sensor_id, name, reading) rows for all sensors.
+
+        Each supported metric has a row; reading is None if it has no data.
+        """
+        cursor = connection.cursor()
+        # Each lateral lookup uses the (sensor_id, metric_type, time) primary
+        # key, avoiding a scan of the full reading history for the summary.
+        cursor.execute("""
+            select sensor.sensor_id, sensor.name,
+                   latest.metric_type, latest.time, latest.value
+            from sensor
+            cross join unnest(%s::sensor_metric_type[]) as metric(metric_type)
+            left join lateral (
+                select metric_type, time, value
+                from sensor_reading
+                where sensor_id = sensor.sensor_id
+                  and metric_type = metric.metric_type
+                order by time desc
+                limit 1
+            ) as latest on true
+            order by sensor.sensor_id
+        """, (SENSOR_METRIC_TYPES,))
+        return [
+            (sensor_id, name,
+             SensorReading(sensor_id, when, metric_type, value)
+             if metric_type is not None else None)
+            for sensor_id, name, metric_type, when, value in cursor.fetchall()
+        ]
+
+    @classmethod
     def from_db(cls, connection, sensor_id):
         cursor = connection.cursor()
         cursor.execute("select name, locator, zone from sensor "

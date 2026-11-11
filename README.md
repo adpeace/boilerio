@@ -13,6 +13,32 @@ heating system.
 
 For more information, please see https://andyhacks.com.
 
+## Sensor summary API
+
+Authenticated clients can fetch all configured sensors and their latest
+temperature and humidity readings in one request to `GET /sensor/summary`
+(relative to the configured API base URL):
+
+```json
+[
+  {
+    "sensor_id": 1,
+    "name": "Living room",
+    "readings": {
+      "temperature": {"value": 19.42, "when": "2026-07-01T11:34:56+00:00"},
+      "humidity": {"value": 48.0, "when": "2026-07-01T11:30:00+00:00"}
+    }
+  },
+  {"sensor_id": 2, "name": "Bedroom", "readings": {}}
+]
+```
+
+Each metric has its own timestamp. Metrics without readings are omitted, and
+sensors without any readings are included with an empty `readings` object.
+An installation without sensors returns `[]`. The existing `GET /sensor/` and
+`GET /sensor/<id>/readings` responses are unchanged. No database migration is
+needed.
+
 ## Installation
 
 More details on installation to be written.  There are several components that
