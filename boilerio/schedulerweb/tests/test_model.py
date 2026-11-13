@@ -51,3 +51,17 @@ def test_models_normalize_offsets_and_reject_naive_timestamps(construct, attribu
 def test_never_infer_timezone_for_a_naive_datetime():
     with pytest.raises(ValueError):
         model.as_utc(datetime(2026, 7, 1))
+
+
+@pytest.mark.parametrize('zone_id', [0, 1, -1])
+def test_clear_override_only_deletes_the_requested_zone(zone_id):
+    conn = MagicMock()
+    model.TargetOverride.clear_from_db(conn, zone_id)
+    conn.cursor.return_value.execute.assert_called_once_with(
+        'delete from override where zone=%s', (zone_id,))
+
+
+def test_clear_all_overrides_requires_no_zone_id():
+    conn = MagicMock()
+    model.TargetOverride.clear_from_db(conn)
+    conn.cursor.return_value.execute.assert_called_once_with('delete from override')

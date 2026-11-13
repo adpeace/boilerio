@@ -120,7 +120,7 @@ class TargetOverride(object):
     def clear_from_db(cls, connection, zone_id=None):
         """ Cancel any current override in database. """
         cursor = connection.cursor()
-        if zone_id:
+        if zone_id is not None:
             cursor.execute('delete from override where zone=%s',
                            (zone_id, ))
         else:
