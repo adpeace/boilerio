@@ -184,7 +184,8 @@ class ReportedState(Resource):
                 datetime.datetime.now(datetime.timezone.utc),
                 zone_id, api.payload['state'], api.payload['target'],
                 api.payload['current_temp'], api.payload['time_to_target'],
-                api.payload['current_outside_temp'], api.payload['dutycycle'])
+                api.payload['current_outside_temp'], api.payload['dutycycle'],
+                api.payload.get('target_overridden'))
         device_state.save(db)
         db.commit()
 

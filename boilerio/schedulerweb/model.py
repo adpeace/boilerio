@@ -157,7 +157,8 @@ class DeviceState(object):
      - 'dutycycle' - floating point value between 0 and 1.
     """
     def __init__(self, received, zone_id, state, target, current_temp,
-                 time_to_target, current_outside_temp, dutycycle):
+                 time_to_target, current_outside_temp, dutycycle,
+                 target_overridden=None):
         self.received = as_utc(received)
         self.zone_id = zone_id
         self.state = state
@@ -166,17 +167,18 @@ class DeviceState(object):
         self.current_outside_temp = current_outside_temp
         self.time_to_target = time_to_target
         self.dutycycle = dutycycle
+        self.target_overridden = target_overridden
 
     def save(self, connection):
         cursor = connection.cursor()
         cursor.execute(
             'insert into device_reported_state '
             '(zone_id, received, state, target, current_temp, '
-            'time_to_target, current_outside_temp, dutycycle) '
-            'values (%s, %s, %s, %s, %s, %s, %s, %s)', (
+            'time_to_target, current_outside_temp, dutycycle, target_overridden) '
+            'values (%s, %s, %s, %s, %s, %s, %s, %s, %s)', (
                 self.zone_id, self.received, self.state, self.target,
                 self.current_temp, self.time_to_target,
-                self.current_outside_temp, self.dutycycle,
+                self.current_outside_temp, self.dutycycle, self.target_overridden,
             ))
 
     @classmethod
@@ -184,7 +186,8 @@ class DeviceState(object):
         cursor = connection.cursor()
         cursor.execute(
             'select received, state, target, current_temp, '
-            'time_to_target, current_outside_temp, dutycycle '
+            'time_to_target, current_outside_temp, dutycycle, '
+            'target_overridden '
             'from device_reported_state '
             'where zone_id=%s order by received desc limit 1', (zone_id,)
             )
