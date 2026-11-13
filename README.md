@@ -258,6 +258,40 @@ chmod-socket = 664
 
 This assumes you have placed your settings file in `/etc/sensors/settings.cfg`.
 
+### Zone status API
+
+`GET /zones/status` returns all configured zones with separate `desired` and
+`reported` objects. `GET /zones/<zone_id>/status` returns the same envelope for
+one zone, or 404 for an unknown zone. Both require the existing session or device
+authentication and honor `BASE_URL`.
+
+The envelope contains `as_of` (the UTC instant used to evaluate desired targets),
+`schedule_timezone` (the configured IANA zone), and `zones`. Each zone includes
+`zone_id`, `name`, `sensor_id`, and:
+
+- `desired.target_temperature`: the current scheduled or overridden target, or
+  null when neither is configured.
+- `desired.override`: an object with `temperature` and UTC `expires_at`, or null
+  when no unexpired override is requested.
+- `reported`: the last controller report, or null if there has never been one.
+  Fields are `received_at`, `target_temperature`, `current_temperature`,
+  `current_outside_temperature`, `controller_state`, `duty_cycle`,
+  `time_to_target` (seconds), and `override_active` (boolean, or null for older
+  reports that did not record the flag).
+
+Controller reports are sent on changes; `received_at` is not a heartbeat and
+does not establish that the controller is currently online. Desired settings
+can differ from reported settings while the scheduler fetches a change, normally
+within its 60-second polling interval. Sensor readings are separately available
+through the bulk `GET /sensor/summary` endpoint. Weekly schedule times from
+`GET /schedule` are interpreted in `schedule_timezone`.
+
+The legacy `GET /summary` and existing reported-state GET response are unchanged.
+New status reads use the `target_overridden` column already present in
+`scheduler.sql`; no database migration is required for a database matching that
+schema. New controller reports must include a boolean `target_overridden`;
+historical reports can still have unknown values.
+
 ### scheduler: The device/controller
 
 The local scheduler component provides the timer and thermostat behaviour: it

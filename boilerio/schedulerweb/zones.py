@@ -1,9 +1,10 @@
 import datetime
 from flask_restx import Namespace, Resource, fields, marshal
-from flask import request
+from flask import current_app, request
 
 from . import model
 from .util import get_db, csrf_protection
+from .status import zone_status
 
 
 api = Namespace('Zones', title="Zone management")
@@ -26,6 +27,61 @@ class ListZones(Resource):
         db = get_db()
         zones = model.Zone.all_from_db(db)
         return zones
+
+
+status_override = api.model('Desired zone override', {
+    'temperature': fields.Float(),
+    'expires_at': fields.DateTime(description='Override deadline as a UTC instant.'),
+})
+desired_status = api.model('Desired zone status', {
+    'target_temperature': fields.Float(description='Current configured target; null without a schedule or override.'),
+    'override': fields.Nested(status_override, allow_null=True),
+})
+reported_status = api.model('Reported zone status', {
+    'received_at': fields.DateTime(description='Last report receipt time; not a heartbeat.'),
+    'target_temperature': fields.Float(),
+    'current_temperature': fields.Float(),
+    'current_outside_temperature': fields.Float(),
+    'controller_state': fields.String(),
+    'duty_cycle': fields.Float(),
+    'time_to_target': fields.Integer(description='Estimated seconds to target.'),
+    'override_active': fields.Boolean(description='Controller acknowledgement; null for older reports.'),
+})
+zone_status_model = api.model('Zone status', {
+    'zone_id': fields.Integer(),
+    'name': fields.String(),
+    'sensor_id': fields.Integer(),
+    'desired': fields.Nested(desired_status),
+    'reported': fields.Nested(reported_status, allow_null=True),
+})
+status_response = api.model('Zone status response', {
+    'as_of': fields.DateTime(description='Server time used to evaluate desired settings.'),
+    'schedule_timezone': fields.String(description='IANA timezone for weekly schedule times.'),
+    'zones': fields.List(fields.Nested(zone_status_model)),
+})
+
+
+@api.route('/status')
+class ZoneStatuses(Resource):
+    """Configured targets and the latest controller observations for all zones."""
+
+    @api.marshal_with(status_response)
+    @api.response(401, 'Authentication required')
+    def get(self):
+        return zone_status(get_db(), current_app.extensions['heating_timezone'])
+
+
+@api.route('/<int:zone_id>/status')
+class ZoneStatus(Resource):
+    """The same status contract restricted to a single configured zone."""
+
+    @api.response(200, 'Success', status_response)
+    @api.response(404, 'Unknown zone')
+    def get(self, zone_id):
+        result = zone_status(get_db(), current_app.extensions['heating_timezone'], zone_id)
+        if result is None:
+            return 'Unknown zone', 404
+        return marshal(result, status_response)
 
 
 an_override = api.model("Temperature target override", {

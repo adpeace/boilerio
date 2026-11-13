@@ -197,6 +197,36 @@ class DeviceState(object):
         data = data[0]
         return cls(data[0], zone_id, *data[1:])
 
+    @classmethod
+    def latest_for_zones(cls, connection, zone_ids):
+        """Load the latest complete report for each zone with one indexed query.
+
+        Keep last_from_db's legacy projection unchanged for existing clients.
+        The status API also exposes receipt time and override acknowledgement.
+        """
+        if not zone_ids:
+            return {}
+        cursor = connection.cursor()
+        cursor.execute("""
+            select ids.zone_id, latest.received, latest.state, latest.target,
+                   latest.current_temp, latest.time_to_target,
+                   latest.current_outside_temp, latest.dutycycle,
+                   latest.target_overridden
+            from unnest(%s::integer[]) as ids(zone_id)
+            join lateral (
+                select received, state, target, current_temp, time_to_target,
+                       current_outside_temp, dutycycle, target_overridden
+                from device_reported_state
+                where zone_id = ids.zone_id
+                order by received desc
+                limit 1
+            ) as latest on true
+        """, (list(zone_ids),))
+        return {
+            row[0]: cls(row[1], row[0], *row[2:])
+            for row in cursor.fetchall()
+        }
+
 
 SENSOR_METRIC_TYPES = ['temperature', 'humidity', 'battery_voltage']
 
