@@ -97,6 +97,18 @@ def test_weather_refreshes_only_when_due_including_after_long_gaps(
         assert worker._outside_temperature == 10
 
 
+def test_missing_weather_is_retried_on_next_sensor_report():
+    weather = Mock()
+    weather.get_weather.side_effect = [None, WeatherReading(10, 76, 0, 0)]
+    worker = monitor.MqttMonitor(Mock(), 'relay', 'sensor', weather, Mock())
+    message = SimpleNamespace(topic='sensor', payload='{"temperature": 20}')
+
+    worker.mqtt_temperature_update(None, None, message)
+    assert worker._outside_temperature is None
+    worker.mqtt_temperature_update(None, None, message)
+    assert worker._outside_temperature == 10
+
+
 def test_monitor_can_post_gradient_to_csrf_protected_endpoint(monkeypatch, monitor_client):
     web = Flask(__name__)
     measurements = []
