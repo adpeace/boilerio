@@ -1,6 +1,7 @@
 from boilerio import monitor
 from boilerio.schedulerweb.model import Zone
 from boilerio.tempsensor import EmonTHSensor
+from boilerio.weather import WeatherReading
 from configparser import RawConfigParser
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -85,7 +86,7 @@ def test_weather_refreshes_only_when_due_including_after_long_gaps(
     clock = iter(ticks)
     monkeypatch.setattr(monitor.time, 'monotonic', lambda: next(clock))
     weather = Mock()
-    weather.get_weather.return_value = {'temperature': 10}
+    weather.get_weather.return_value = WeatherReading(10, 76, 0, 0)
     worker = monitor.MqttMonitor(Mock(), 'relay', 'sensor', weather, Mock(),
                                  weather_update_interval_s=3600)
     message = SimpleNamespace(topic='sensor', payload='{"temperature": 20}')
@@ -93,6 +94,7 @@ def test_weather_refreshes_only_when_due_including_after_long_gaps(
     for count in expected_fetches:
         worker.mqtt_temperature_update(None, None, message)
         assert weather.get_weather.call_count == count
+        assert worker._outside_temperature == 10
 
 
 def test_monitor_can_post_gradient_to_csrf_protected_endpoint(monkeypatch, monitor_client):
@@ -110,7 +112,7 @@ def test_monitor_can_post_gradient_to_csrf_protected_endpoint(monkeypatch, monit
                         lambda url, json, headers=None, **kwargs:
                         client.post(url, json=json, headers=headers))
     monkeypatch.setattr(monitor.weather.Weather, 'get_weather',
-                        lambda self: {'temperature': 10})
+                        lambda self: WeatherReading(10, 76, 0, 0))
     monkeypatch.setattr(monitor.Monitor, 'temperature_update', lambda *args: (10, 2))
     callbacks = {}
     monitor_client.message_callback_add.side_effect = lambda topic, handler: callbacks.update({topic: handler})

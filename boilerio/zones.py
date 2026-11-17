@@ -1,10 +1,10 @@
-from collections.abc import Mapping
 from datetime import timedelta
 import json
 import logging
 import requests
 
 from .cached_resource import CachedResource
+from .weather import WeatherReading
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class ZoneController(object):
             self.do_update_state = True
             logger.debug("State change: %s", str(kwargs))
 
-    def get_time_to_target(self, outside: Mapping[str, float]) -> timedelta | None:
+    def get_time_to_target(self, outside: WeatherReading | None) -> timedelta | None:
         """Estimate time to reach temperature target using fetched weather.
 
         Return None when no estimate is available."""
@@ -83,12 +83,12 @@ class ZoneController(object):
         # integral over time.
 
         # If we're not heating, just return nothing:
-        if (not self.thermostat.is_heating or
+        if (outside is None or not self.thermostat.is_heating or
             self._sensor.reading is None or
             self.thermostat.target < self._sensor.reading.temperature):
             return None
         else:
-            delta_t = self._sensor.reading.temperature - outside['temperature']
+            delta_t = self._sensor.reading.temperature - outside.temperature
 
             # Find a gradient where the delta between inside and out was
             # closest to the current temperature:
@@ -143,7 +143,8 @@ class ZoneController(object):
         current_weather = self.weather.get_weather()
         time_to_target = self.get_time_to_target(current_weather)
         self._update_state(
-            current_outside_temp=current_weather['temperature'],
+            current_outside_temp=(current_weather.temperature
+                                  if current_weather is not None else None),
             time_to_target=(time_to_target.total_seconds()
                             if time_to_target is not None else None))
 

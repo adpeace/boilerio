@@ -121,7 +121,8 @@ class MqttMonitor(Monitor):
             try:
                 w = self.weather.get_weather()
                 logger.info("Updating weather information: %s", str(w))
-                self.set_outside_temperature(w['temperature'], now)
+                if w is not None:
+                    self.set_outside_temperature(w.temperature, now)
             except:
                 logging.error("Unable to get weather.  Skipping update this "
                               "iteration")

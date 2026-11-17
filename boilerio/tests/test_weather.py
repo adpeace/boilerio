@@ -1,8 +1,5 @@
 import requests_mock
-import requests.exceptions
 import pytest
-import datetime
-import json
 from datetime import timedelta
 
 from .. import weather
@@ -19,10 +16,9 @@ def test_simple_result():
                 weather.Weather('apikey', 'Girton,GB').get_weather()
                 ]
         for resp in responses:
-            assert 'temperature' in resp
-            assert resp['temperature'] == 282.57
-            assert all(x in resp for x in
-                    ['temperature', 'humidity', 'sunset', 'sunrise'])
+            assert resp == weather.WeatherReading(
+                temperature=282.57, humidity=76.0,
+                sunrise=1546243745, sunset=1546271815)
 
 
 def test_caching_weather_actually_caches():
@@ -30,18 +26,12 @@ def test_caching_weather_actually_caches():
 
     sample_good_output = '{"coord":{"lon":0.08,"lat":52.24},"weather":[{"id":804,"main":"Clouds","description":"overcast clouds","icon":"04d"}],"base":"stations","main":{"temp":282.57,"pressure":1034,"humidity":76,"temp_min":282.15,"temp_max":283.15},"visibility":10000,"wind":{"speed":3.6,"deg":260},"clouds":{"all":90},"dt":1546262760,"sys":{"type":1,"id":1482,"message":0.0031,"country":"GB","sunrise":1546243745,"sunset":1546271815},"id":2648627,"name":"Girton","cod":200}'
     sample_good_output2 = '{"coord":{"lon":0.08,"lat":52.24},"weather":[{"id":804,"main":"Clouds","description":"overcast clouds","icon":"04d"}],"base":"stations","main":{"temp":288.57,"pressure":1034,"humidity":76,"temp_min":282.15,"temp_max":283.15},"visibility":10000,"wind":{"speed":3.6,"deg":260},"clouds":{"all":90},"dt":1546262760,"sys":{"type":1,"id":1482,"message":0.0031,"country":"GB","sunrise":1546243745,"sunset":1546271815},"id":2648627,"name":"Girton","cod":200}'
-    sample_good_rv = {
-        'temperature': float(json.loads(sample_good_output)['main']['temp']),
-        'humidity': float(json.loads(sample_good_output)['main']['humidity']),
-        'sunrise': int(json.loads(sample_good_output)['sys']['sunrise']),
-        'sunset': int(json.loads(sample_good_output)['sys']['sunset']),
-    }
-    sample_good_rv2 = {
-        'temperature': float(json.loads(sample_good_output2)['main']['temp']),
-        'humidity': float(json.loads(sample_good_output2)['main']['humidity']),
-        'sunrise': int(json.loads(sample_good_output2)['sys']['sunrise']),
-        'sunset': int(json.loads(sample_good_output2)['sys']['sunset']),
-    }
+    sample_good_rv = weather.WeatherReading(
+        temperature=282.57, humidity=76.0,
+        sunrise=1546243745, sunset=1546271815)
+    sample_good_rv2 = weather.WeatherReading(
+        temperature=288.57, humidity=76.0,
+        sunrise=1546243745, sunset=1546271815)
 
     with requests_mock.Mocker() as m:
         m.get(weather.WEATHER_API_ENDPOINT, text=sample_good_output)
@@ -72,3 +62,8 @@ class TestErrorCases(object):
                 weather.get_weather('apikey', 'Girton,GB')
             with pytest.raises(weather.WeatherServiceError):
                 weather.Weather('apikey', 'Girton,GB').get_weather()
+
+    def test_no_cached_weather_returns_none(self):
+        with requests_mock.Mocker() as m:
+            m.get(weather.WEATHER_API_ENDPOINT, status_code=503)
+            assert weather.CachingWeather('apikey', 'Girton,GB').get_weather() is None

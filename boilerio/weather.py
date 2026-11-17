@@ -1,6 +1,8 @@
 import requests
 import logging
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import timedelta
 
 logging.basicConfig()
@@ -9,17 +11,22 @@ logger.setLevel(logging.DEBUG)
 
 WEATHER_API_ENDPOINT = 'https://api.openweathermap.org/data/2.5/weather'
 
+
+@dataclass(frozen=True)
+class WeatherReading:
+    """Weather in Celsius and percent humidity, with Unix sunrise/sunset times."""
+
+    temperature: float
+    humidity: float
+    sunrise: int
+    sunset: int
+
+
 class WeatherServiceError(Exception):
     pass
 
-def get_weather(apikey, city):
-    """Return a simplified weather result:
-
-    Result will be of the format:
-        {'temperature': TEMP, 'humidity': HUM, 'sunrise': SUNRISE,
-         'sunset': SUNSET}
-    where SUNRISE and SUNSET are UNIX times in UTC.
-    """
+def get_weather(apikey: str, city: str) -> WeatherReading:
+    """Fetch and parse a weather reading."""
     try:
         r = requests.get(WEATHER_API_ENDPOINT, params={
             'q': city, 'apikey': apikey, 'units': 'metric'}, timeout=10)
@@ -30,12 +37,12 @@ def get_weather(apikey, city):
     if r.status_code == 200:
         result = r.json()
         try:
-            return {
-                'temperature': float(result['main']['temp']),
-                'humidity': float(result['main']['humidity']),
-                'sunrise': int(result['sys']['sunrise']),
-                'sunset': int(result['sys']['sunset']),
-                }
+            return WeatherReading(
+                temperature=float(result['main']['temp']),
+                humidity=float(result['main']['humidity']),
+                sunrise=int(result['sys']['sunrise']),
+                sunset=int(result['sys']['sunset']),
+            )
         except Exception as e:
             logger.error("Couldn't get weather: %s (response %s; code %d)",
                     str(e), r.text, r.status_code)
@@ -51,7 +58,7 @@ class Weather(object):
         self.apikey = apikey
         self.location = location
 
-    def get_weather(self):
+    def get_weather(self) -> WeatherReading | None:
         """Fetch latest weather."""
         return get_weather(self.apikey, self.location)
 
@@ -64,9 +71,9 @@ class CachingWeather(Weather):
         super(CachingWeather, self).__init__(apikey, location)
         self._last_updated = None
         self._cache_time = cache_time
-        self._last_result = None
+        self._last_result: WeatherReading | None = None
 
-    def get_weather(self, now_fn=time.monotonic):
+    def get_weather(self, now_fn: Callable[[], float] = time.monotonic) -> WeatherReading | None:
         """Fetch weather from cache (if not timed out) or online."""
         now = now_fn()
         if (self._last_result is None or self._last_updated is None or
