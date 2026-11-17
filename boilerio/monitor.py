@@ -7,12 +7,16 @@ import time
 import json
 import requests
 import requests.exceptions
+from pathlib import Path
+from queue import Full
 from requests.auth import HTTPBasicAuth
 import paho.mqtt.client as mqtt
 
 from . import config
-from . import scheduler
 from . import weather
+from . import startup
+from .background import WorkerPool
+from .cached_resource import refresh_startup
 from .version import software_version
 
 logging.basicConfig()
@@ -90,8 +94,7 @@ class Monitor(object):
 
 class MqttMonitor(Monitor):
     def __init__(self, mqttc, zone_info_topic, sensor_topic, weather,
-            gradient_callback_fn, warmup_interval_s=600,
-            weather_update_interval_s=3600):
+            gradient_callback_fn, warmup_interval_s=600):
         """Initialize MqttMonitor.
 
         gradient_callback_fn is a function that is called when a new
@@ -100,7 +103,6 @@ class MqttMonitor(Monitor):
         and the inside gradient when heating was on in degrees C per hour.
         """
         self.weather = weather
-        self.weather_update_interval = weather_update_interval_s
         self.gradient_callback_fn = gradient_callback_fn
 
         # Set up MQTT callbacks:
@@ -114,18 +116,10 @@ class MqttMonitor(Monitor):
         now = time.monotonic()
         data = json.loads(msg.payload)
 
-        # Should we update the outside temperature?
-        # XXX using CachingWeather instead...
-        if (self._outside_temperature is None or
-            now - self._outside_temperature_time >= self.weather_update_interval):
-            try:
-                w = self.weather.get_weather()
-                logger.info("Updating weather information: %s", str(w))
-                if w is not None:
-                    self.set_outside_temperature(w.temperature, now)
-            except:
-                logging.error("Unable to get weather.  Skipping update this "
-                              "iteration")
+        # The weather service controls refresh and retry intervals.
+        w = self.weather.get_weather()
+        if w is not None:
+            self.set_outside_temperature(w.temperature, now)
         try:
             temp = float(data['temperature'])
         except ValueError as e:
@@ -162,8 +156,24 @@ def main():
         logger.info("Not using HTTP authentication")
         auth = None
     scheduler_url = conf.get('heating', 'scheduler_url')
-    zones = scheduler.load_zone_info(scheduler_url, auth)
-    sensors = scheduler.construct_sensors(scheduler_url, auth)
+    fetch_worker = WorkerPool(name='monitor-fetch')
+    upload_worker = WorkerPool(name='monitor-upload')
+    try:
+        run_monitor(conf, auth, scheduler_url, fetch_worker, upload_worker)
+    finally:
+        fetch_worker.close()
+        upload_worker.close()
+
+
+def run_monitor(conf, auth, scheduler_url, fetch_worker, upload_worker):
+    weather_obj = weather.Weather(conf.get('weather', 'apikey'),
+                                  conf.get('weather', 'location'), worker=fetch_worker)
+    deadline = time.monotonic() + 30
+    configuration = startup.load_configuration(
+        scheduler_url, auth, min(deadline, time.monotonic() + 10),
+        Path('/var/lib/boilerio/monitor-configuration'))
+    refresh_startup([weather_obj._resource], deadline)
+    zones, sensors = configuration.zones, configuration.sensors
 
     # Connect to MQTT:
     def mqtt_on_connect(client, userdata, flags, reason_code, properties):
@@ -183,12 +193,19 @@ def main():
         def post_gradient(when, delta, gradient):
             data = {'when': when.isoformat(), 'delta': delta,
                     'gradient': gradient}
-            r = requests.post(scheduler_url +
-                    '/zones/%d/gradient_measurements' % zone_id,
-                    auth=auth, json=data, timeout=10,
-                    headers={'X-Requested-With': 'device'})
-            logger.info("Posted gradient %s for zone %d, status code %d",
-                    str(data), zone_id, r.status_code)
+
+            def upload():
+                r = requests.post(scheduler_url +
+                        '/zones/%d/gradient_measurements' % zone_id,
+                        auth=auth, json=data, timeout=10,
+                        headers={'X-Requested-With': 'device'})
+                logger.info("Posted gradient %s for zone %d, status code %d",
+                            data, zone_id, r.status_code)
+
+            try:
+                upload_worker.submit(('gradient', zone_id), upload)
+            except Full:
+                logger.warning('Gradient upload queue full for zone %d', zone_id)
         return post_gradient
 
     monitors = [
@@ -196,8 +213,7 @@ def main():
             mqttc, (conf.get('heating', 'info_basetopic') + '/0x' +
                 format(int(zone.boiler_relay, 0), 'X')),
             sensors[zone.sensor_id].locator,
-            weather.Weather(conf.get('weather', 'apikey'),
-                            conf.get('weather', 'location')),
+            weather_obj,
             post_gradient_fn(zone.zone_id))
         for zone in zones
     ]

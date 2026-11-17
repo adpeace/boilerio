@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from datetime import datetime, timezone
 import requests_mock
 import json
+from .http_helpers import InlineWorker
 
 class MockSensor:
     def __init__(self):
@@ -22,7 +23,7 @@ class MockSensor:
 def test_adding_sensor_register_a_callback():
     # Given: a TempSensorUpdator and sensor
     sensor = MagicMock()
-    updater = TempSensorUpdater('http://foo/', None)
+    updater = TempSensorUpdater('http://foo/', None, InlineWorker())
 
     # When: adding the sensor to the updater
     updater.add_sensor(sensor)
@@ -32,7 +33,7 @@ def test_adding_sensor_register_a_callback():
 
 def test_sensor_update_causes_updates_to_be_published():
     # Given: a TempSensorUpdator and mock sensor
-    updater = TempSensorUpdater('http://foo', None)
+    updater = TempSensorUpdater('http://foo', None, InlineWorker())
     sensor = MockSensor()
     updater.add_sensor(sensor)
 
@@ -46,7 +47,7 @@ def test_sensor_update_causes_updates_to_be_published():
 
 def test_sensor_update_doesnt_leak_exception_on_failed_post():
     # Given: a TempSensorUpdator and mock sensor
-    updater = TempSensorUpdater('http://foo', None)
+    updater = TempSensorUpdater('http://foo', None, InlineWorker())
     sensor = MockSensor()
     updater.add_sensor(sensor)
 
@@ -60,7 +61,7 @@ def test_sensor_update_doesnt_leak_exception_on_failed_post():
 
 
 def test_sensor_upload_keeps_offset_and_microseconds():
-    updater = TempSensorUpdater('http://foo', None)
+    updater = TempSensorUpdater('http://foo', None, InlineWorker())
     when = datetime.fromisoformat('2026-07-01T12:34:56.123456+01:00')
     with requests_mock.Mocker() as m:
         m.post('http://foo/sensor/1/readings', status_code=200)
@@ -77,7 +78,7 @@ def test_unchanged_reports_make_no_api_calls_until_fifteen_minutes(monkeypatch):
     tick = [0]
     monkeypatch.setattr(tempsensor.time, 'monotonic', lambda: tick[0])
     sensor = EmonTHSensor(5, 'emon_sensors/emonth5')
-    updater = TempSensorUpdater('http://foo', None)
+    updater = TempSensorUpdater('http://foo', None, InlineWorker())
     updater.add_sensor(sensor)
     with requests_mock.Mocker() as requests:
         requests.post('http://foo/sensor/5/readings', status_code=200)
@@ -106,7 +107,7 @@ def test_unchanged_reports_make_no_api_calls_until_fifteen_minutes(monkeypatch):
 
 def test_only_changed_metrics_are_uploaded():
     sensor = EmonTHSensor(5, 'emon_sensors/emonth5')
-    TempSensorUpdater('http://foo', None).add_sensor(sensor)
+    TempSensorUpdater('http://foo', None, InlineWorker()).add_sensor(sensor)
     with requests_mock.Mocker() as requests:
         requests.post('http://foo/sensor/5/readings', status_code=200)
         report(sensor)
@@ -121,7 +122,7 @@ def test_only_changed_metrics_are_uploaded():
 
 def test_failed_metric_is_retried_without_reposting_successful_metrics():
     sensor = EmonTHSensor(5, 'emon_sensors/emonth5')
-    TempSensorUpdater('http://foo', None).add_sensor(sensor)
+    TempSensorUpdater('http://foo', None, InlineWorker()).add_sensor(sensor)
     with requests_mock.Mocker() as requests:
         requests.post('http://foo/sensor/5/readings', [
             {'status_code': 200}, {'status_code': 200}, {'status_code': 503}, {'status_code': 200},
@@ -137,7 +138,7 @@ def test_failed_metric_is_retried_without_reposting_successful_metrics():
 
 
 def test_reporting_interval_is_per_sensor():
-    updater = TempSensorUpdater('http://foo', None)
+    updater = TempSensorUpdater('http://foo', None, InlineWorker())
     with requests_mock.Mocker() as requests:
         requests.post('http://foo/sensor/5/readings', status_code=200)
         requests.post('http://foo/sensor/6/readings', status_code=200)

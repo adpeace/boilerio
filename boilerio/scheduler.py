@@ -4,11 +4,12 @@
 
 import sys
 import json
-from zoneinfo import ZoneInfo
 import datetime
 from datetime import timedelta
 import logging
 import time
+import math
+from pathlib import Path
 
 import paho.mqtt.client as mqtt
 from requests.auth import HTTPBasicAuth
@@ -16,11 +17,12 @@ from requests.auth import HTTPBasicAuth
 from .schedulerweb import model # XXX
 from . import config
 from . import thermostat
-from . import tempsensor
 from . import update_sensor
 from . import weather
 from . import zones
-from .cached_resource import CachedResource, get_url_with_fallback
+from . import startup
+from .background import WorkerPool
+from .cached_resource import CachedResource, refresh_startup
 from .version import software_version
 
 logging.basicConfig()
@@ -59,9 +61,6 @@ class MqttBoiler(object):
     def off(self):
         self._command('X')
 
-class ZoneInfoUnavailable(Exception):
-    pass
-
 class SchedulerTemperaturePolicy(object):
     ENTRY_TARGET_OVERRIDE = -2
 
@@ -79,6 +78,11 @@ class SchedulerTemperaturePolicy(object):
     def from_json(cls, j, heating_timezone):
         data = json.loads(j)
 
+        def temperature(value):
+            if value is not None and (type(value) not in (int, float) or not math.isfinite(value)):
+                raise ValueError('Expected a finite temperature or null')
+            return value
+
         entries = []
         for day in sorted(data['schedule']):
             for item in data['schedule'][day]:
@@ -87,13 +91,13 @@ class SchedulerTemperaturePolicy(object):
                         int(day),
                         strptime(item['when'], "%H:%M").time(),
                         zone['zone'],
-                        zone['temp']
+                        temperature(zone['temp'])
                         ))
         schedule = model.FullSchedule(entries)
         tgt_override = data['target_override']
         tgt_override = [
             model.TargetOverride(datetime.datetime.fromisoformat(t['until']),
-                                 t['temp'], t['zone'])
+                                 temperature(t['temp']), t['zone'])
             for t in tgt_override
             ]
         return cls(schedule, tgt_override, heating_timezone)
@@ -171,60 +175,24 @@ def mqtt_on_connect(client, userdata, flags, reason_code, properties):
         client.subscribe(sensor.locator)
     client.subscribe(userdata['thermostat_schedule_change_topic'])
 
-def load_system_timezone(scheduler_url, auth, cache_path='/var/lib/boilerio/system'):
-    """Load the configured timezone from the service or cache."""
-    data = get_url_with_fallback(cache_path, scheduler_url + '/system', auth)
-    if data is None:
-        raise ValueError("No heating timezone available from server or cache")
-    return ZoneInfo(json.loads(data)['timezone'])
-
-
-def load_zone_info(scheduler_url, auth):
-    """Load zone information from service. """
-    BOILERIO_ZONE_BACKUP_FILE = '/var/lib/boilerio/zones'
-
-    zone_data = get_url_with_fallback(BOILERIO_ZONE_BACKUP_FILE,
-                                      scheduler_url + '/zones', auth)
-    if zone_data is None:
-        raise ZoneInfoUnavailable()
-    zones = json.loads(zone_data)
-
-    return [model.Zone(z['zone_id'], z['name'], z['boiler_relay'], z['sensor_id'])
-            for z in zones]
-
-def construct_sensors(scheduler_url, auth):
-    """Construct sensors from service.
-
-    Return a dictionary of sensor_id -> EmonTHSensor object"""
-    SENSOR_BACKUP_FILE = '/var/lib/boilerio/sensors'
-
-    sensor_data = get_url_with_fallback(SENSOR_BACKUP_FILE,
-                                        scheduler_url + '/sensor/', auth)
-    if sensor_data is None:
-        raise ZoneInfoUnavailable()
-    sensors = json.loads(sensor_data)
-
-    return {
-        s['sensor_id']: tempsensor.EmonTHSensor(s['sensor_id'], s['locator'])
-        for s in sensors
-    }
-
-
 class AllZoneController(object):
     """Controller for multiple zones.
 
     Interfaces between the web API and a set of local zone controllers."""
 
     SCHEDULER_UPDATE_INTERVAL = timedelta(seconds=60)
+    FETCH_WAIT_SECONDS = 5
 
     def __init__(self, scheduler_url, auth, zone_controllers, heating_timezone,
-                 schedule_cache_path=None):
+                 schedule_cache_path=None, fetch_worker=None, clock=time.monotonic):
+        self.clock = clock
         self.heating_timezone = heating_timezone
         self.scheduler = None
         self._schedule_resource = CachedResource(
-            scheduler_url + '/schedule', auth, schedule_cache_path,
-            parser=lambda text: SchedulerTemperaturePolicy.from_json(text, heating_timezone),
-            update_interval=self.SCHEDULER_UPDATE_INTERVAL)
+            scheduler_url + '/schedule',
+            lambda text: SchedulerTemperaturePolicy.from_json(text, heating_timezone),
+            auth=auth, cache_path=schedule_cache_path,
+            update_interval=self.SCHEDULER_UPDATE_INTERVAL, worker=fetch_worker, clock=clock)
 
         self.scheduler_url = scheduler_url
         self.auth = auth
@@ -235,12 +203,49 @@ class AllZoneController(object):
 
         :param datetime now: The current wall-clock time.
         :param float tick: Monotonic time in seconds."""
-        self.scheduler = self._schedule_resource.get(tick)
+        fetch_deadline = self.clock() + self.FETCH_WAIT_SECONDS
+        self.scheduler = self._schedule_resource.get(fetch_deadline)
 
         # Update thermostats:
         if self.scheduler:
             for controller in self.zone_controllers:
-                controller.iteration(self.scheduler, now, tick)
+                controller.iteration(self.scheduler, now, tick, fetch_deadline)
+
+
+def build_controller(conf, scheduler_url, auth, mqttc, fetch_worker, upload_worker,
+                     cache_dir=Path('/var/lib/boilerio'), startup_timeout=30, clock=time.monotonic):
+    """Return a multi-zone controller and its sensors after loading startup data."""
+    # Complete bounded startup refreshes before the control loop starts using cached data.
+    deadline = clock() + startup_timeout
+    cache_dir = Path(cache_dir)
+    weather_obj = weather.Weather(conf.get('weather', 'apikey'),
+                                  conf.get('weather', 'location'),
+                                  cache_time=timedelta(minutes=20), worker=fetch_worker, clock=clock)
+    configuration = startup.load_configuration(
+        scheduler_url, auth, min(deadline, clock() + 10), cache_dir / 'configuration', clock=clock)
+    sensor_updater = update_sensor.TempSensorUpdater(scheduler_url, auth, upload_worker)
+    for sensor in configuration.sensors.values():
+        sensor.register_mqtt_callbacks(mqttc)
+        sensor_updater.add_sensor(sensor)
+
+    controllers = []
+    for zone in configuration.zones:
+        boiler = MqttBoiler(zone.boiler_relay, mqttc,
+                            conf.get('heating', 'demand_request_topic'))
+        sensor = configuration.sensors[zone.sensor_id]
+        controller = zones.ZoneController(
+            zone, boiler, sensor, thermostat.Thermostat(boiler, sensor),
+            scheduler_url, auth, weather_obj,
+            gradient_table_cache_path=cache_dir / f'gradients-{zone.zone_id}',
+            fetch_worker=fetch_worker, upload_worker=upload_worker, clock=clock)
+        controllers.append(controller)
+
+    controller = AllZoneController(
+        scheduler_url, auth, controllers, configuration.timezone,
+        schedule_cache_path=cache_dir / 'schedule', fetch_worker=fetch_worker, clock=clock)
+    refresh_startup([controller._schedule_resource] + [
+        zone._gradient_resource for zone in controllers] + [weather_obj._resource], deadline, clock)
+    return controller, configuration.sensors
 
 def main():
     logger.info("Starting boilerio scheduler %s", software_version())
@@ -262,56 +267,35 @@ def main():
     else:
         scheduler_url = conf.get('heating', 'scheduler_url')
 
-    heating_timezone = load_system_timezone(scheduler_url, auth)
-    logger.info("Heating timezone: %s", heating_timezone.key)
-    sensors = construct_sensors(scheduler_url, auth)
-    zone_info = load_zone_info(scheduler_url, auth)
-
-    mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, userdata={
+    userdata = {
         'conf': conf,
         'thermostat_schedule_change_topic':
             conf.get('heating', 'thermostat_schedule_change_topic'),
         'scheduler_url': scheduler_url,
         'auth': auth,
-        'sensors': sensors,
-        })
+        'sensors': {},
+        }
+    mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, userdata=userdata)
     mqttc.username_pw_set(conf.get('mqtt', 'user'),
                           conf.get('mqtt', 'password'))
     mqttc.on_connect = mqtt_on_connect
-    mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
-
-    sensor_updater = update_sensor.TempSensorUpdater(scheduler_url, auth)
-
-    zone_controllers = []
-    weather_obj = weather.CachingWeather(conf.get('weather', 'apikey'),
-            conf.get('weather', 'location'), cache_time=timedelta(minutes=20))
-
-    for sensor in sensors.values():
-        sensor.register_mqtt_callbacks(mqttc)
-        sensor_updater.add_sensor(sensor)
-
-    for zone in zone_info:
-        zone_boiler = MqttBoiler(zone.boiler_relay, mqttc,
-                                 conf.get('heating', 'demand_request_topic'))
-        zone_sensor = sensors[zone.sensor_id]
-        zone_thermostat = thermostat.Thermostat(zone_boiler, zone_sensor)
-        zone_controller = zones.ZoneController(
-            zone, zone_boiler, zone_sensor, zone_thermostat, scheduler_url,
-            auth, weather_obj,
-            gradient_table_cache_path='/var/lib/boilerio/gradients-%d' % zone.zone_id)
-        zone_controllers.append(zone_controller)
-
-    mqttc.loop_start()
-
-    # Update thermostats every second and schedule every 60s:
-    controller = AllZoneController(
-        scheduler_url, auth, zone_controllers, heating_timezone,
-        schedule_cache_path='/var/lib/boilerio/schedule')
-    while True:
-        controller.iteration(datetime.datetime.now(datetime.timezone.utc), time.monotonic())
-        time.sleep(1)
-
-    mqttc.loop_stop()
+    fetch_worker = WorkerPool(name='fetch')
+    upload_worker = WorkerPool(name='upload')
+    try:
+        controller, sensors = build_controller(
+            conf, scheduler_url, auth, mqttc, fetch_worker, upload_worker)
+        userdata['sensors'] = sensors
+        mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
+        mqttc.loop_start()
+        try:
+            while True:
+                controller.iteration(datetime.datetime.now(datetime.timezone.utc), time.monotonic())
+                time.sleep(1)
+        finally:
+            mqttc.loop_stop()
+    finally:
+        fetch_worker.close()
+        upload_worker.close()
 
 if __name__ == "__main__":
     main()

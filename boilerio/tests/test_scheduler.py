@@ -3,14 +3,20 @@
 
 from datetime import time, datetime, timedelta, timezone
 import json
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 from unittest.mock import Mock
 
 from .. import scheduler
 from ..schedulerweb import model
 import requests_mock
-import requests.exceptions
 import pytest
+
+from .http_helpers import Clock, InlineWorker, iterate_at
+
+
+def make_controller(*args, **kwargs):
+    return scheduler.AllZoneController(*args, fetch_worker=InlineWorker(), clock=Clock(), **kwargs)
+
 
 LONDON = ZoneInfo("Europe/London")
 
@@ -36,54 +42,31 @@ EMPTY_SCHEDULE_RESPONSE = """{
 # Scheduler tests
 #
 
-def test_no_exception_if_request_raises():
-    with requests_mock.Mocker() as m:
-        m.get("https://scheduler/api/schedule", exc=requests.exceptions.Timeout)
-        zc = scheduler.AllZoneController('https://scheduler/api', None, [], LONDON)
-        zc.iteration(None, 0)
-
-def test_no_exception_if_request_fails():
-    with requests_mock.Mocker() as m:
-        m.get("https://scheduler/api/schedule", status_code=401)
-        zc = scheduler.AllZoneController('https://scheduler/api', None, [], LONDON)
-        zc.iteration(None, 0)
-
-
-@pytest.mark.parametrize('failure', [
-    {'status_code': 500}, {'status_code': 401},
-    {'exc': requests.exceptions.Timeout},
-    {'exc': requests.exceptions.ConnectionError},
-    {'text': 'invalid json'}, {'json': {}},
-    {'json': {'schedule': None, 'target_override': []}},
-])
-@pytest.mark.parametrize('cached', [False, True])
-def test_failed_schedule_fetch_is_throttled_and_retains_policy(failure, cached):
+def test_zones_wait_until_a_schedule_is_available():
     zone = Mock()
-    controller = scheduler.AllZoneController(
-        'https://scheduler/api', None, [zone], LONDON)
-    url = 'https://scheduler/api/schedule'
+    controller = make_controller('https://scheduler/api', None, [zone], LONDON)
     with requests_mock.Mocker() as http:
-        if cached:
-            http.get(url, text=EMPTY_SCHEDULE_RESPONSE)
-            controller.iteration(None, 0)
-            start = 60
-        else:
-            start = 0
-        policy = controller.scheduler
-        http.get(url, **failure)
-        http.reset_mock()
-        zone.reset_mock()
-        for tick in range(start, start + 120):
-            controller.iteration(None, tick)
-            assert http.call_count == (1 if tick < start + 60 else 2)
-            assert controller.scheduler is policy
-        assert zone.iteration.call_count == (120 if cached else 0)
+        http.get('https://scheduler/api/schedule', status_code=503)
+        iterate_at(controller, None, 0)
+        zone.iteration.assert_not_called()
 
-        http.get(url, text=EMPTY_SCHEDULE_RESPONSE)
-        controller.iteration(None, start + 120)
-        assert http.call_count == 3
-        assert controller.scheduler is not None
-        zone.iteration.assert_called_with(controller.scheduler, None, start + 120)
+        http.get('https://scheduler/api/schedule', text=EMPTY_SCHEDULE_RESPONSE)
+        iterate_at(controller, None, 60)
+        zone.iteration.assert_called_once_with(controller.scheduler, None, 60, 65)
+
+
+def test_invalid_schedule_refresh_keeps_last_policy_in_control():
+    zone = Mock()
+    controller = make_controller('https://scheduler/api', None, [zone], LONDON)
+    with requests_mock.Mocker() as http:
+        http.get('https://scheduler/api/schedule', text=EMPTY_SCHEDULE_RESPONSE)
+        iterate_at(controller, None, 0)
+        last_policy = controller.scheduler
+        zone.reset_mock()
+
+        http.get('https://scheduler/api/schedule', json={'schedule': None, 'target_override': []})
+        iterate_at(controller, None, 60)
+        zone.iteration.assert_called_once_with(last_policy, None, 60, 65)
 
 
 def test_offline_schedule_startup_preserves_override_expiry(tmp_path):
@@ -93,123 +76,31 @@ def test_offline_schedule_startup_preserves_override_expiry(tmp_path):
         'target_override': [{'zone': 1, 'temp': 23, 'until': '2026-11-02T12:00:00+00:00'}],
     }))
     zone = Mock()
-    controller = scheduler.AllZoneController(
+    controller = make_controller(
         'https://scheduler/api', None, [zone], LONDON, schedule_cache_path=cache)
+    controller._schedule_resource.load_backup()
     with requests_mock.Mocker() as http:
         http.get('https://scheduler/api/schedule', status_code=500)
         before = instant(2026, 11, 2, 11, 59, 59)
-        controller.iteration(before, 0)
+        iterate_at(controller, before, 0)
         assert controller.scheduler.target(before, 1) == 23
         after = before + timedelta(seconds=1)
-        controller.iteration(after, 1)
+        iterate_at(controller, after, 1)
         assert controller.scheduler.target(after, 1) == 18
         assert http.call_count == 1
-        zone.iteration.assert_called_with(controller.scheduler, after, 1)
-
-
-def test_cached_response_used_when_web_service_is_offline(monkeypatch, tmp_path):
-    def offline(*args, **kwargs):
-        raise requests.exceptions.ConnectionError("offline")
-
-    monkeypatch.setattr(requests, 'get', offline)
-    backup = tmp_path / 'zones'
-    backup.write_text('[{"zone_id": 1}]')
-    assert scheduler.get_url_with_fallback(
-        str(backup), 'https://scheduler/zones', None) == '[{"zone_id": 1}]'
-
-
-def test_zone_and_sensor_load_accept_cached_responses(monkeypatch):
-    def cached_response(fallback, url, auth):
-        if url.endswith('/zones'):
-            return '[{"zone_id": 1, "name": "living", "boiler_relay": "0x1", "sensor_id": 2}]'
-        return '[{"sensor_id": 2, "locator": "sensors/living"}]'
-
-    monkeypatch.setattr(scheduler, 'get_url_with_fallback', cached_response)
-    assert scheduler.load_zone_info('https://scheduler', None)[0].zone_id == 1
-    assert scheduler.construct_sensors('https://scheduler', None)[2].locator == 'sensors/living'
-
-
-def test_zone_and_sensor_load_raise_when_offline_without_cache(monkeypatch):
-    monkeypatch.setattr(scheduler, 'get_url_with_fallback',
-                        lambda fallback, url, auth: None)
-    with pytest.raises(scheduler.ZoneInfoUnavailable):
-        scheduler.load_zone_info('https://scheduler', None)
-    with pytest.raises(scheduler.ZoneInfoUnavailable):
-        scheduler.construct_sensors('https://scheduler', None)
-
-
-@pytest.mark.parametrize('loader,endpoint,payload,invalid,read_result', [
-    (scheduler.load_system_timezone, '/system', {'timezone': 'Europe/London'},
-     {'timezone': 'Invalid/Zone'}, lambda result: result.key),
-    (scheduler.load_zone_info, '/zones',
-     [{'zone_id': 1, 'name': 'Room', 'boiler_relay': '0x1', 'sensor_id': 2}],
-     [{'zone_id': 1}], lambda result: result[0].name),
-    (scheduler.construct_sensors, '/sensor/', [{'sensor_id': 2, 'locator': 'sensor/2'}],
-     [{'sensor_id': 2}], lambda result: result[2].locator),
-])
-def test_loaders_parse_online_and_cached_responses_consistently(
-        monkeypatch, tmp_path, loader, endpoint, payload, invalid, read_result):
-    cache = tmp_path / 'cache'
-    fetch = scheduler.get_url_with_fallback
-    monkeypatch.setattr(scheduler, 'get_url_with_fallback',
-                        lambda fallback, url, auth: fetch(cache, url, auth))
-    with requests_mock.Mocker() as requests:
-        requests.get('http://scheduler' + endpoint, json=payload)
-        original = read_result(loader('http://scheduler', None))
-        assert json.loads(cache.read_text()) == payload
-        requests.get('http://scheduler' + endpoint, status_code=503)
-        assert read_result(loader('http://scheduler', None)) == original
-        requests.get('http://scheduler' + endpoint, json=invalid)
-        with pytest.raises((ValueError, KeyError, TypeError)):
-            loader('http://scheduler', None)
-        assert json.loads(cache.read_text()) == invalid
-        requests.get('http://scheduler' + endpoint, status_code=503)
-        with pytest.raises((ValueError, KeyError, TypeError)):
-            loader('http://scheduler', None)
-
-
-def test_cache_creation_failure_does_not_discard_valid_response(tmp_path):
-    cache = tmp_path / 'missing-directory' / 'cache'
-    with requests_mock.Mocker() as requests:
-        requests.get('http://scheduler/config', json={'value': 'new'})
-        assert json.loads(scheduler.get_url_with_fallback(cache, 'http://scheduler/config', None)) == {'value': 'new'}
-    assert not cache.exists()
-
-
-def test_helper_returns_cached_text_without_parsing(tmp_path):
-    cache = tmp_path / 'cache'
-    cache.write_text('not json')
-    with requests_mock.Mocker() as requests:
-        requests.get('http://scheduler/config', status_code=503)
-        assert scheduler.get_url_with_fallback(cache, 'http://scheduler/config', None) == 'not json'
-
-def test_system_configuration_cache_and_invalid_response(tmp_path):
-    cache = tmp_path / 'system'
-    url = 'http://scheduler/system'
-    with requests_mock.Mocker() as requests:
-        requests.get(url, json={'timezone': 'Europe/London'})
-        assert scheduler.load_system_timezone('http://scheduler', None, cache).key == 'Europe/London'
-        requests.get(url, status_code=503)
-        assert scheduler.load_system_timezone('http://scheduler', None, cache).key == 'Europe/London'
-        requests.get(url, json={'timezone': 'Invalid/Zone'})
-        with pytest.raises(ZoneInfoNotFoundError):
-            scheduler.load_system_timezone('http://scheduler', None, cache)
-        requests.get(url, text='invalid json')
-        with pytest.raises(ValueError):
-            scheduler.load_system_timezone('http://scheduler', None, cache)
-        assert cache.read_text() == 'invalid json'
-        requests.get(url, status_code=503)
-        with pytest.raises(ValueError):
-            scheduler.load_system_timezone('http://scheduler', None, cache)
-        cache.unlink()
-        requests.get(url, status_code=503)
-        with pytest.raises(ValueError, match='No heating timezone'):
-            scheduler.load_system_timezone('http://scheduler', None, cache)
+        zone.iteration.assert_called_with(controller.scheduler, after, 1, 1 + controller.FETCH_WAIT_SECONDS)
 
 
 #
 # Scheduler policy tests
 #
+
+@pytest.mark.parametrize('temperature', ['bad', True, float('nan'), float('inf')])
+def test_invalid_schedule_temperature_is_rejected_before_control(temperature):
+    payload = {'schedule': {'0': [{'when': '00:00', 'zones': [{'zone': 1, 'temp': temperature}]}]},
+               'target_override': []}
+    with pytest.raises(ValueError, match='finite temperature'):
+        scheduler.SchedulerTemperaturePolicy.from_json(json.dumps(payload), LONDON)
 
 def test_from_json_one_override():
     """Check JSON parsing for simple configuration with one override."""

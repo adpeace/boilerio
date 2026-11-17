@@ -7,19 +7,20 @@ from zoneinfo import ZoneInfo
 import requests_mock
 
 from boilerio import scheduler, tempsensor
+from .http_helpers import Clock, InlineWorker, iterate_at
 
 
 def test_polling_uses_elapsed_seconds_and_keeps_policy_on_http_failure():
     controller = scheduler.AllZoneController('http://scheduler', None, [],
-                                            ZoneInfo('Europe/London'))
+                                            ZoneInfo('Europe/London'), fetch_worker=InlineWorker(), clock=Clock())
     with requests_mock.Mocker() as requests:
         requests.get('http://scheduler/schedule', json={'schedule': {}, 'target_override': []})
-        controller.iteration(datetime(2026, 10, 25, 0, 59, 59), 0)
+        iterate_at(controller, datetime(2026, 10, 25, 0, 59, 59), 0)
         policy = controller.scheduler
-        controller.iteration(datetime(2026, 10, 25, 1), 1)
+        iterate_at(controller, datetime(2026, 10, 25, 1), 1)
         assert requests.call_count == 1
         requests.get('http://scheduler/schedule', status_code=503)
-        controller.iteration(datetime(2026, 10, 25), 60)
+        iterate_at(controller, datetime(2026, 10, 25), 60)
         assert requests.call_count == 2
         assert controller.scheduler is policy
 

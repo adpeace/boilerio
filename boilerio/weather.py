@@ -1,13 +1,10 @@
-import requests
-import logging
+import json
+import math
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+from .cached_resource import CachedResource
 
 WEATHER_API_ENDPOINT = 'https://api.openweathermap.org/data/2.5/weather'
 
@@ -22,66 +19,33 @@ class WeatherReading:
     sunset: int
 
 
-class WeatherServiceError(Exception):
-    pass
-
-def get_weather(apikey: str, city: str) -> WeatherReading:
-    """Fetch and parse a weather reading."""
+def parse_weather(text: str) -> WeatherReading:
+    """Parse a weather API response into a validated WeatherReading."""
+    result = json.loads(text)
     try:
-        r = requests.get(WEATHER_API_ENDPOINT, params={
-            'q': city, 'apikey': apikey, 'units': 'metric'}, timeout=10)
-    except requests.exceptions.ConnectionError as e:
-        logger.error("Couldn't get weather: %s", e)
-        raise
+        reading = WeatherReading(
+            temperature=float(result['main']['temp']),
+            humidity=float(result['main']['humidity']),
+            sunrise=int(result['sys']['sunrise']),
+            sunset=int(result['sys']['sunset']),
+        )
+    except OverflowError as e:
+        raise ValueError('Weather values must be finite') from e
+    if not all(math.isfinite(value) for value in (reading.temperature, reading.humidity)):
+        raise ValueError('Weather values must be finite')
+    return reading
 
-    if r.status_code == 200:
-        result = r.json()
-        try:
-            return WeatherReading(
-                temperature=float(result['main']['temp']),
-                humidity=float(result['main']['humidity']),
-                sunrise=int(result['sys']['sunrise']),
-                sunset=int(result['sys']['sunset']),
-            )
-        except Exception as e:
-            logger.error("Couldn't get weather: %s (response %s; code %d)",
-                    str(e), r.text, r.status_code)
-            raise
-    else:
-        logger.error("Couldn't get weather: response %s; code %d",
-                r.text, r.status_code)
-        raise WeatherServiceError(r)
 
-class Weather(object):
-    """Get weather data for a fixed location and apikey."""
-    def __init__(self, apikey, location):
-        self.apikey = apikey
-        self.location = location
+class Weather:
+    """Cached weather observations for a fixed location."""
 
-    def get_weather(self) -> WeatherReading | None:
-        """Fetch latest weather."""
-        return get_weather(self.apikey, self.location)
+    def __init__(self, apikey: str, location: str,
+                 cache_time: timedelta = timedelta(hours=1), worker=None, clock=time.monotonic):
+        self._resource = CachedResource(
+            WEATHER_API_ENDPOINT, parse_weather,
+            params={'q': location, 'apikey': apikey, 'units': 'metric'},
+            update_interval=cache_time, worker=worker, clock=clock)
 
-class CachingWeather(Weather):
-    """Returns weather data for a fixed location/apikey and caches it.
-
-    Used to avoid excessive API calls when the data doesn't change very
-    often anyway."""
-    def __init__(self, apikey, location, cache_time=timedelta(hours=1)):
-        super(CachingWeather, self).__init__(apikey, location)
-        self._last_updated = None
-        self._cache_time = cache_time
-        self._last_result: WeatherReading | None = None
-
-    def get_weather(self, now_fn: Callable[[], float] = time.monotonic) -> WeatherReading | None:
-        """Fetch weather from cache (if not timed out) or online."""
-        now = now_fn()
-        if (self._last_result is None or self._last_updated is None or
-            self._last_updated + self._cache_time.total_seconds() < now):
-            try:
-                self._last_result = super(CachingWeather, self).get_weather()
-                self._last_updated = now
-            except WeatherServiceError as e:
-                logger.info("Failed to get updated weather information, using "
-                        "cached result")
-        return self._last_result
+    def get_weather(self, deadline: float | None = None) -> WeatherReading | None:
+        """Return the latest reading, optionally waiting until the monotonic deadline."""
+        return self._resource.get(deadline)

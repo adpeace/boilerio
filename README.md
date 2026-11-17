@@ -133,13 +133,43 @@ scheduler also needs a writable mount at `/var/lib/boilerio` for its last-known
 zone, sensor, schedule, and gradient data, so it can restart while the web service
 is unavailable after a successful online run.
 Give UID 10001 write access to this directory on the host. The heating timezone
-is obtained from the server's `/system` endpoint and cached here as `system`;
-container `TZ` does not determine heating schedule times.
+is obtained from the server's `/system` endpoint; container `TZ` does not
+determine heating schedule times. Timezone, sensor, and zone configuration are
+validated together and saved atomically in `configuration`. If any configuration
+request fails or the responses are incompatible, startup uses the entire previous
+snapshot without modifying it. The first startup needs a successful online
+configuration refresh to create this snapshot.
+Invalid or incomplete snapshots are ignored as a whole when loading fallback data.
+Fallback age is preserved across restarts. The monitor uses its own
+`monitor-configuration` snapshot, and each daemon reads and writes only its own snapshot.
 The schedule is cached as `schedule` and each zone's gradients as `gradients-<id>`.
 Failed schedule and gradient fetches retry at most once per minute and retain the
 last valid data. Successful schedule fetches refresh every minute; gradients
 refresh hourly. Invalid responses do not replace these caches. Without a cached
 or online schedule, zone control waits until a schedule becomes available.
+
+On every startup, before enabling control, the scheduler attempts to refresh timezone, sensor,
+zone, weather, schedule, and gradient data. Requests have a 10-second timeout;
+the two startup refresh phases share a 30-second overall waiting budget.
+The configuration phase waits at most 10 seconds, then schedules, gradients,
+and optional weather refresh together. Independent requests run concurrently.
+Failed or unfinished refreshes use validated disk backups, logging their age.
+Fetch workers return candidates; only startup selects and publishes them.
+Late startup results cannot change disk or live data or suppress runtime retries.
+Without valid timezone, sensor, and zone configuration, startup fails and the
+service manager can retry. Weather and gradient data are optional.
+The monitor loads the same timezone, sensor, and zone configuration, plus optional weather.
+
+After startup, HTTP fetches and uploads run in separate background worker pools.
+Each heating iteration shares a five-second waiting budget across schedule, gradient,
+and weather refreshes before using cached data. Unfinished fetches continue in
+the background and can be collected on a later iteration. MQTT callbacks read
+cached values without waiting for HTTP. Pending sensor readings are coalesced
+per sensor and metric, and zone reports retain the newest state until an upload succeeds. This bounds
+the backlog during outages; intermediate unsent readings may be superseded.
+Sensor uploads preserve the original reading timestamps and use a 10-second
+timeout. Shutdown discards queued uploads rather than waiting for remote peers.
+
 The configuration must include the `[mqtt]`, `[heating]`, and `[weather]`
 sections; the scheduler requires `scheduler_url`,
 `thermostat_schedule_change_topic`, and weather `apikey` and `location` in
@@ -280,7 +310,9 @@ The envelope contains `as_of` (the UTC instant used to evaluate desired targets)
   reports that did not record the flag).
 
 Controller reports are sent on changes; `received_at` is not a heartbeat and
-does not establish that the controller is currently online. Desired settings
+does not establish that the controller is currently online.
+Failed uploads leave the latest local state pending and retry at most once per
+minute without terminating thermostat control. Desired settings
 can differ from reported settings while the scheduler fetches a change, normally
 within its 60-second polling interval. Sensor readings are separately available
 through the bulk `GET /sensor/summary` endpoint. Weekly schedule times from
