@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import timedelta
 import json
 import logging
@@ -73,10 +74,10 @@ class ZoneController(object):
             self.do_update_state = True
             logger.debug("State change: %s", str(kwargs))
 
-    def get_time_to_target(self):
-        """Estimate time to reach temperature target.
+    def get_time_to_target(self, outside: Mapping[str, float]) -> timedelta | None:
+        """Estimate time to reach temperature target using fetched weather.
 
-        Returns a timedelta object."""
+        Return None when no estimate is available."""
         # This algorithm overestimates the time taken because it uses the
         # gradient at the start of heating, whereas it should be using an
         # integral over time.
@@ -87,7 +88,6 @@ class ZoneController(object):
             self.thermostat.target < self._sensor.reading.temperature):
             return None
         else:
-            outside = self.weather.get_weather()
             delta_t = self._sensor.reading.temperature - outside['temperature']
 
             # Find a gradient where the delta between inside and out was
@@ -108,8 +108,6 @@ class ZoneController(object):
 
     def report_updated_state(self):
         url = self.scheduler_url + '/zones/%d/reported_state' % self.zone.zone_id
-        ttt = self.get_time_to_target()
-        self.reported_state['time_to_target'] = ttt.total_seconds() if ttt else None
         r = requests.post(url, auth=self.scheduler_auth,
             timeout=10, json=self.reported_state, headers={'X-Requested-With': 'device'})
         if r.status_code == 200:
@@ -143,7 +141,11 @@ class ZoneController(object):
 
         # Update weather:
         current_weather = self.weather.get_weather()
-        self._update_state(current_outside_temp=current_weather['temperature'])
+        time_to_target = self.get_time_to_target(current_weather)
+        self._update_state(
+            current_outside_temp=current_weather['temperature'],
+            time_to_target=(time_to_target.total_seconds()
+                            if time_to_target is not None else None))
 
         # Report updated state if necessary:
         if self.do_update_state:
