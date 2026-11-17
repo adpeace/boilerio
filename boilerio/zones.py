@@ -2,6 +2,7 @@ from concurrent.futures import Future
 from datetime import timedelta
 import json
 import logging
+import math
 from queue import Full
 import time
 import requests
@@ -111,7 +112,7 @@ class ZoneController(object):
                     match = gradient
 
             # Now use it to estimate heating time:
-            if match is None:
+            if match is None or not math.isfinite(match['gradient']) or match['gradient'] <= 0:
                 return None
             amount_to_heat = self.thermostat.target - self._sensor.reading.temperature
             return timedelta(hours=(amount_to_heat / match['gradient']))

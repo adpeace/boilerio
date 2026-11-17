@@ -6,6 +6,10 @@ from datetime import timedelta, datetime
 
 from boilerio import zones
 from boilerio.weather import WeatherReading
+from boilerio.thermostat import Thermostat
+from boilerio.tempsensor import SensorReading
+from types import SimpleNamespace
+from datetime import timezone
 from .http_helpers import Clock, HeldWorker, InlineWorker, iterate_at
 
 
@@ -167,3 +171,23 @@ def test_failed_zone_upload_retries_latest_state_one_minute_after_completion(fai
         iterate_at(controller, policy, None, 192)
         worker.run_next()
         assert reports.last_request.json()['current_temp'] == 19
+
+
+@pytest.mark.parametrize('gradient', [0, -1, float('nan'), float('inf')])
+def test_unusable_heating_gradient_disables_eta_without_stopping_control(gradient):
+    boiler = MagicMock()
+    sensor = SimpleNamespace(reading=SensorReading(datetime.now(timezone.utc), 15, 70, 0))
+    thermostat = Thermostat(boiler, sensor)
+    weather = MagicMock()
+    weather.get_weather.return_value = WeatherReading(5, 70, 0, 0)
+    controller = zones.ZoneController(SimpleNamespace(zone_id=1), boiler, sensor, thermostat,
+                                      'http://scheduler', None, weather, upload_worker=InlineWorker())
+    controller._gradient_resource.value = [{'delta': 10, 'gradient': gradient}]
+    policy = MagicMock()
+    policy.target.return_value = 20
+    policy.target_overridden.return_value = False
+    with requests_mock.Mocker() as http:
+        reports = http.post('http://scheduler/zones/1/reported_state', status_code=200)
+        controller.iteration(policy, None, 0)
+    boiler.on.assert_called_once()
+    assert reports.last_request.json()['time_to_target'] is None
