@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.33.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -52,6 +52,7 @@ boiler_to_mqtt = "boilerio.boiler_to_mqtt:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["boilerio"]
+exclude = ["/boilerio/tests", "/boilerio/schedulerweb/tests"]
 
 [tool.hatch.build.targets.sdist]
 include = ["boilerio", "README.md", "LICENSE"]

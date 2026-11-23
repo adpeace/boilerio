@@ -8,6 +8,11 @@ import os
 import subprocess
 from importlib.metadata import version as _package_version, PackageNotFoundError
 
+try:
+    from ._build_revision import REVISION
+except ModuleNotFoundError:
+    REVISION = None
+
 
 def _git_revision():
     """Return the short git commit, with a trailing '+' if the working tree has
@@ -34,15 +39,14 @@ def _git_revision():
 def software_version():
     """Return the running software version.
 
-    The package version, optionally suffixed with the git commit it was built
-    from (e.g. "0.1.0+ab12cd3").  A trailing '+' on the commit indicates the
-    working tree had uncommitted local modifications.
+    Release builds include the full source commit. Source checkouts report the
+    short commit and append '+' when the working tree has local modifications.
     """
     try:
         ver = _package_version("boilerio")
     except PackageNotFoundError:
         ver = "unknown"
-    revision = _git_revision()
+    revision = REVISION or _git_revision()
     if revision:
         return "%s+%s" % (ver, revision)
     return ver

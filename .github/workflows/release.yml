@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  distributions:
+    name: Build Python distributions
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.build.outputs.tag }}
+      version: ${{ steps.build.outputs.version }}
+      revision: ${{ steps.build.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.14"
+          python-version: "3.14"
+      - name: Build and verify the distributions
+        id: build
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: uv run --no-project --python 3.14 python scripts/release/build.py dist/release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-distributions
+          path: dist/release/
+          overwrite: true
+          if-no-files-found: error
+
+  tests:
+    uses: ./.github/workflows/test.yml
+
+  controller-image:
+    name: Build and test the controller image
+    needs: [distributions, tests]
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.build-image.outputs.image }}
+    env:
+      RELEASE_VERSION: ${{ needs.distributions.outputs.version }}
+      RELEASE_REVISION: ${{ needs.distributions.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v7
+        with:
+          name: python-distributions
+          path: dist/release
+      - name: Verify the build inputs
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELEASE_REVISION"
+          cd dist/release
+          sha256sum --check SHA256SUMS
+          set -- boilerio-*.whl
+          test "$#" = 1 && test -f "$1"
+      - name: Build the image
+        id: build-image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          docker buildx create --driver docker-container --use
+          repository="ghcr.io/${GITHUB_REPOSITORY,,}-controller"
+          build_options=(
+            --platform linux/arm64
+            --target image-wheel
+            --build-context wheel-input="$PWD/dist/release"
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+            --label "org.opencontainers.image.revision=$RELEASE_REVISION"
+            --label "org.opencontainers.image.version=$RELEASE_VERSION"
+          )
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+            docker buildx build "${build_options[@]}" \
+              --tag "${repository}:candidate-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+              --push --metadata-file "$RUNNER_TEMP/build.json" .
+            digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/build.json")
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            image="$repository@$digest"
+            docker pull --platform linux/arm64 "$image"
+            echo "image=$image" >> "$GITHUB_OUTPUT"
+          else
+            image="boilerio:controller-smoke"
+            docker buildx build "${build_options[@]}" --tag "$image" --load .
+          fi
+          echo "SMOKE_IMAGE=$image" >> "$GITHUB_ENV"
+      - name: Smoke-test the built image
+        run: bash scripts/release/smoke-controller.sh "$SMOKE_IMAGE" "$RELEASE_VERSION+$RELEASE_REVISION"
+
+  draft:
+    name: Prepare GitHub Release draft
+    if: github.event_name == 'push'
+    needs: [distributions, controller-image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.distributions.outputs.tag }}
+      RELEASE_REVISION: ${{ needs.distributions.outputs.revision }}
+      RELEASE_IMAGE: ${{ needs.controller-image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v7
+        with:
+          name: python-distributions
+          path: dist/release
+      - name: Create the draft with the tested controller image digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd dist/release && sha256sum --check SHA256SUMS)
+          python3 scripts/release/draft.py dist/release

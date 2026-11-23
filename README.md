@@ -121,6 +121,35 @@ Python 3.14. To test another version, override it explicitly, for example with
 Syncing replaces the local `.venv` when its interpreter changes. A normal
 `uv run` or `uv sync` will restore the pinned default.
 
+### Preparing a release
+
+The **Release** workflow can be run manually from a branch to build the
+wheel and source archive, run the Python test matrix, and smoke-test the Pi
+image. Download the distributions and checksums from the workflow's
+`python-distributions` artifact.
+
+For a release, update the version in `pyproject.toml` and run `uv lock`.
+Push the release commit to the default branch, then push an annotated tag
+matching the package version, such as `v0.5.0`. The tag run tests the Pi image
+by its GHCR digest, then prepares a draft GitHub Release with a digest-pinned
+pull command, the wheel, the source archive, and `SHA256SUMS`. Review the
+draft before publishing it in GitHub. The image job uses the repository's
+`GITHUB_TOKEN` to push to GHCR.
+
+If draft preparation fails, choose **Re-run failed jobs** on the original
+Actions run so it reuses the tested image and distribution files. If an
+interrupted upload left an incomplete asset in the draft, remove that asset
+before retrying.
+
+The Pi image runs on `linux/arm64` and installs the release wheel. Use the
+digest-pinned image reference from the release notes. For a local wheel-based
+build, place one BoilerIO wheel in a directory and build with:
+
+```sh
+docker buildx build --target image-wheel \
+  --build-context wheel-input=./path/to/wheel-directory --load -t boilerio:dev .
+```
+
 ### Container image for the Raspberry Pi
 
 Build from this directory with `docker build -t boilerio:local .` on the Pi, or
