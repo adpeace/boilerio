@@ -2,8 +2,8 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 14.10 (Ubuntu 14.10-0ubuntu0.22.04.1)
--- Dumped by pg_dump version 14.10 (Ubuntu 14.10-0ubuntu0.22.04.1)
+-- Dumped from database version 14.10 (Debian 14.10-1.pgdg120+1)
+-- Dumped by pg_dump version 14.10 (Debian 14.10-1.pgdg120+1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -445,6 +445,13 @@ GRANT ALL ON TABLE public.device TO scheduler;
 
 
 --
+-- Name: SEQUENCE device_device_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.device_device_id_seq TO scheduler;
+
+
+--
 -- Name: TABLE device_reported_state; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -494,6 +501,13 @@ GRANT ALL ON TABLE public.sensor_reading TO scheduler;
 
 
 --
+-- Name: SEQUENCE sensor_sensor_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.sensor_sensor_id_seq TO scheduler;
+
+
+--
 -- Name: TABLE users; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -501,10 +515,24 @@ GRANT ALL ON TABLE public.users TO scheduler;
 
 
 --
+-- Name: SEQUENCE users_user_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.users_user_id_seq TO scheduler;
+
+
+--
 -- Name: TABLE zones; Type: ACL; Schema: public; Owner: postgres
 --
 
 GRANT ALL ON TABLE public.zones TO scheduler;
+
+
+--
+-- Name: SEQUENCE zones_zone_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.zones_zone_id_seq TO scheduler;
 
 
 --
