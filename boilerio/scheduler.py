@@ -173,7 +173,6 @@ def mqtt_on_connect(client, userdata, flags, reason_code, properties):
         return
     for sensor in userdata['sensors'].values():
         client.subscribe(sensor.locator)
-    client.subscribe(userdata['thermostat_schedule_change_topic'])
 
 class AllZoneController(object):
     """Controller for multiple zones.
@@ -269,8 +268,6 @@ def main():
 
     userdata = {
         'conf': conf,
-        'thermostat_schedule_change_topic':
-            conf.get('heating', 'thermostat_schedule_change_topic'),
         'scheduler_url': scheduler_url,
         'auth': auth,
         'sensors': {},
