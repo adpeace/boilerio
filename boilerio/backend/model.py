@@ -27,6 +27,40 @@ def db_connect(host, db, user, pw):
     return conn
 
 
+_UNDEFINED_TABLE = '42P01'
+
+
+def installation_id(connection):
+    """Return this installation's stable identifier as a lowercase UUID string.
+
+    The row is created on first use rather than shipped in scheduler.sql, so a
+    schema-only dump of the database is always a complete schema. Creating it
+    commits the connection's current transaction.
+    """
+    query = "select installation_id from installation"
+    cursor = connection.cursor()
+    try:
+        cursor.execute(query)
+        row = cursor.fetchone()
+        if row is None:
+            # The singleton primary key makes concurrent first requests safe.
+            cursor.execute(
+                "insert into installation default values on conflict do nothing")
+            connection.commit()
+            cursor.execute(query)
+            row = cursor.fetchone()
+    except Exception as err:
+        if getattr(err, 'pgcode', None) != _UNDEFINED_TABLE:
+            raise
+        connection.rollback()
+        raise RuntimeError(
+            "The installation table is missing: the database schema is "
+            "older than this version of BoilerIO (see scheduler.sql).") from err
+    if row is None:
+        raise LookupError("The installation table has no row")
+    return str(row[0]).lower()
+
+
 class FullSchedule(object):
     """ The heating schedule. """
     def __init__(self, entries: list[tuple]):

@@ -8,6 +8,7 @@ from .. import app, model, status, zones
 
 
 NOW = datetime(2026, 7, 5, 23, 30, tzinfo=timezone.utc)  # Monday in London.
+INSTALLATION_ID = '0b7c6f4e-5d3a-4c1b-9e8f-2a1d0c9b8a7f'
 
 
 @pytest.fixture
@@ -19,6 +20,7 @@ def data(monkeypatch):
     monkeypatch.setattr(model.FullSchedule, 'from_db', lambda db: model.FullSchedule([
         (0, time(0), 0, 20), (6, time(0), 0, 15)]))
     monkeypatch.setattr(model.TargetOverride, 'from_db', lambda db: [])
+    monkeypatch.setattr(model, 'installation_id', lambda db: INSTALLATION_ID)
     db.cursor.return_value.fetchall.return_value = [
         (0, NOW - timedelta(seconds=30), 'On', 18, 17.5, None, 12, 1, False)]
     return db
@@ -26,6 +28,7 @@ def data(monkeypatch):
 
 def test_status_distinguishes_desired_reported_and_missing_reports(data):
     result = status.zone_status(data, ZoneInfo('Europe/London'), now=NOW)
+    assert result['installation_id'] == INSTALLATION_ID
     assert result['as_of'] == NOW
     assert result['schedule_timezone'] == 'Europe/London'
     downstairs, upstairs = result['zones']

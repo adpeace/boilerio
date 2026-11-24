@@ -55,6 +55,8 @@ zone_status_model = api.model('Zone status', {
     'reported': fields.Nested(reported_status, allow_null=True),
 })
 status_response = api.model('Zone status response', {
+    'installation_id': fields.String(
+        description='Stable UUID identifying this BoilerIO installation.'),
     'as_of': fields.DateTime(description='Server time used to evaluate desired settings.'),
     'schedule_timezone': fields.String(description='IANA timezone for weekly schedule times.'),
     'zones': fields.List(fields.Nested(zone_status_model)),

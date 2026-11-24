@@ -373,7 +373,7 @@ The backend is a Flask application backed by PostgreSQL. It can run on the
 same Pi or on a separate machine. These steps are for Debian
 or Raspberry Pi OS.
 
-**Database.** Install PostgreSQL, create the `scheduler` role and the `boilerio`
+**Database.** Install PostgreSQL (version 14 or newer), create the `scheduler` role and the `boilerio`
 database, then load the schema from [`scheduler.sql`](../scheduler.sql) as the
 `postgres` superuser (the schema's tables are owned by `postgres` and granted
 to `scheduler`, so the role must exist first):

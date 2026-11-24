@@ -47,4 +47,9 @@ def zone_status(db, heating_timezone, zone_id=None, now=None):
                 'override_active': report.target_overridden,
             } if report is not None else None,
         })
-    return {'as_of': now, 'schedule_timezone': heating_timezone.key, 'zones': result}
+    return {
+        'installation_id': model.installation_id(db),
+        'as_of': now,
+        'schedule_timezone': heating_timezone.key,
+        'zones': result,
+    }

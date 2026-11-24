@@ -127,6 +127,19 @@ ALTER SEQUENCE public.gradient_measurement_id_seq OWNED BY public.gradient_measu
 
 
 --
+-- Name: installation; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.installation (
+    singleton boolean DEFAULT true NOT NULL,
+    installation_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    CONSTRAINT installation_singleton CHECK (singleton)
+);
+
+
+ALTER TABLE public.installation OWNER TO postgres;
+
+--
 -- Name: override; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -336,6 +349,14 @@ ALTER TABLE ONLY public.gradient_measurement
 
 
 --
+-- Name: installation installation_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.installation
+    ADD CONSTRAINT installation_pkey PRIMARY KEY (singleton);
+
+
+--
 -- Name: override override_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -478,6 +499,13 @@ GRANT ALL ON TABLE public.gradient_measurement TO scheduler;
 --
 
 GRANT ALL ON SEQUENCE public.gradient_measurement_id_seq TO scheduler;
+
+
+--
+-- Name: TABLE installation; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,INSERT ON TABLE public.installation TO scheduler;
 
 
 --
