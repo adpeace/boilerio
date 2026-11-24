@@ -1,0 +1,68 @@
+# BoilerIO on-site services: the controller (thermostat logic) and the Danfoss
+# bridge to the Danfoss receiver. Both talk to an MQTT broker that you provide.
+#
+# Standalone:
+#   cp examples/compose.env.example .env   # then edit it
+#   docker compose -f examples/compose.yaml --env-file .env up -d
+#
+# As part of a larger stack, reuse these services with `extends` and add
+# anything stack-specific (broker dependency, image override) in your file.
+# There you can also give them names that say they're BoilerIO's:
+#
+#   services:
+#     boilerio-controller:
+#       extends: {file: boilerio.compose.yaml, service: controller}
+#       depends_on: {mosquitto: {condition: service_healthy}}
+#
+# The image is published for linux/arm64 only (e.g. a 64-bit Raspberry Pi OS).
+
+# Standalone, the containers are named boilerio-controller-1 and
+# boilerio-danfoss-bridge-1. A stack that extends these services uses its own
+# project name instead.
+name: boilerio
+
+x-boilerio: &boilerio
+  image: ${BOILERIO_IMAGE:?Set BOILERIO_IMAGE to the image reference from the GitHub release}
+  platform: linux/arm64
+  user: "10001:10001"
+  init: true
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ["/tmp:rw,nosuid,nodev,size=16m"]
+  environment:
+    TZ: ${TZ:-Europe/London}
+  logging:
+    driver: local
+    options: {max-size: "5m", max-file: "3"}
+
+x-config: &config
+  type: bind
+  source: ${BOILERIO_CONFIG:-/etc/boilerio/config.ini}
+  target: /etc/boilerio/config.ini
+  read_only: true
+  bind: {create_host_path: false}
+
+services:
+  controller:
+    <<: *boilerio
+    command: [boilerio-controller]
+    volumes:
+      - *config
+      # Cached zones, schedule and overrides, so heating continues while the
+      # backend is unreachable. Create it owned by 10001:10001 beforehand.
+      - type: bind
+        source: ${BOILERIO_STATE_DIR:-/var/lib/boilerio}
+        target: /var/lib/boilerio
+        bind: {create_host_path: false}
+
+  danfoss-bridge:
+    <<: *boilerio
+    command: [boilerio-danfoss-bridge, /dev/boiler-rf]
+    devices:
+      - "${BOILER_DEVICE:?Set BOILER_DEVICE to the /dev/serial/by-id/ path of the RF adapter}:/dev/boiler-rf:rw"
+    group_add:
+      # Numeric group owning the device on the host: stat -Lc %g "$BOILER_DEVICE"
+      - "${SERIAL_GID:?Set SERIAL_GID to the RF adapter's numeric group}"
+    volumes: [*config]

@@ -1,475 +1,82 @@
 # The BoilerIO Software Thermostat
 
-BoilerIO can control heating in your home.  Code is provided here to connect
-with Danfoss RF receivers though other implementations could easily be added,
-and to receive temperature updates over MQTT in a format described later in this
-README.
-
-This has been tested with the Danfoss RF transciever code in the thermostat.git
-repository at https://github.com/adpeace/thermostat.git.
-
-No warranty is provided: please be careful if you are messing with your own
-heating system.
-
-For more information, please see https://andyhacks.com.
-
-## Sensor summary API
-
-Authenticated clients can fetch all configured sensors and their latest
-temperature, humidity, and battery voltage readings in one request to `GET /sensor/summary`
-(relative to the configured API base URL):
-
-```json
-[
-  {
-    "sensor_id": 1,
-    "name": "Living room",
-    "readings": {
-      "temperature": {"value": 19.42, "when": "2026-07-01T11:34:56+00:00"},
-      "humidity": {"value": 48.0, "when": "2026-07-01T11:30:00+00:00"},
-      "battery_voltage": {"value": 1.2, "when": "2026-07-01T11:34:56+00:00"}
-    },
-    "state": {"battery": "low"}
-  },
-  {"sensor_id": 2, "name": "Bedroom", "readings": {}, "state": {"battery": "unknown"}}
-]
-```
-
-Each metric has its own timestamp. Metrics without readings are omitted, and
-sensors without any readings are included with an empty `readings` object.
-An installation without sensors returns `[]`. The existing `GET /sensor/` and
-`GET /sensor/<id>/readings` endpoints remain available; the latter also returns
-battery voltage when reported. No database migration is needed: the existing
-`battery_voltage` metric stores total pack voltage in volts.
-
-The summary derives `state.battery` as `low` at **2.0 V or below**, `ok` above
-that, or `unknown` if battery data is missing, invalid, or more than 30 minutes
-old. These thresholds are constants in `boilerio/schedulerweb/sensors.py`.
-The raw last reading and its timestamp remain available when stale.
-
-The emonTH MQTT adapter delivers temperature, humidity, and optional battery
-voltage together through one reading callback. The updater posts each metric
-when first received, when its value changes, or after 15 minutes unchanged
-(`REPORT_INTERVAL_SECONDS` in `boilerio/update_sensor.py`). The POST endpoint
-still accepts one metric per request.
-The interval uses monotonic receipt time and is tracked separately per sensor
-and metric after successful uploads. Refreshes require an actual MQTT report;
-a silent sensor's last reading is never re-posted. Invalid or missing battery
-fields do not refresh battery data or interrupt temperature updates.
-
-## Installation
-
-More details on installation to be written.  There are several components that
-need to be configured:
-
-1.  The web application and database, to provide the online component.
-1.  The local scheduler and boiler interface.
-1.  The sensor inputs
-
-You can install from the repository to get a specific version, such as the
-latest development version not yet published to PyPI, or install via `pip` from
-PyPI for a recent tested version by running:
-
-```
-pip install boilerio
-```
-
-To install from the git repository, first check it out then install using `pip`:
-
-```
-$ git clone https://github.com/adpeace/boilerio.git
-$ cd boilerio
-$ pip3 install .
-```
-
-Use `-e` to `pip` to install in development mode (i.e. just link to the
-checked-out source instead of installing it).
-
-### Running tests locally
-
-With Docker running and `make` installed, run from the repository root:
-
-```sh
-make test                          # Python 3.15
-make test PYTHON_VERSION=3.13       # One specific version
-make test-matrix                   # All versions in the GitHub Actions matrix
-make test TEST_ARGS='-q -k weather' # Pass arguments to pytest
-```
-
-The test image installs the locked `test` extra, including the web dependencies,
-and runs both test directories configured in `pyproject.toml`. Each Python
-version has its own image. Builds include your current source changes, reuse
-Docker's cache, and need network access to download images and dependencies on
-the first run. The matrix continues after a failure and returns a nonzero exit
-status if any version fails. No heating hardware, MQTT broker, or running
-PostgreSQL server is needed; the tests mock these integrations.
-
-`Dockerfile.test` has its own build context rules to include the tests. The
-Raspberry Pi runtime image below continues to exclude test dependencies.
-
-For a faster development loop without Docker, install a current release of
-[uv](https://docs.astral.sh/uv/getting-started/installation/) and use:
-
-```sh
-uv sync --locked --extra test
-uv run --no-sync pytest
-```
-
-The project's `.python-version` pins the default for `uv sync` and `uv run` to
-Python 3.14. To test another version, override it explicitly, for example with
-`uv sync --locked --extra test --python 3.15`, then `uv run --no-sync pytest`.
-Syncing replaces the local `.venv` when its interpreter changes. A normal
-`uv run` or `uv sync` will restore the pinned default.
-
-### Preparing a release
-
-The **Release** workflow can be run manually from a branch to build the
-wheel and source archive, run the Python test matrix, and smoke-test the Pi
-image. Download the distributions and checksums from the workflow's
-`python-distributions` artifact.
-
-For a release, update the version in `pyproject.toml` and run `uv lock`.
-Push the release commit to the default branch, then push an annotated tag
-matching the package version, such as `v0.5.0`. The tag run tests the Pi image
-by its GHCR digest, then prepares a draft GitHub Release with a digest-pinned
-pull command, the wheel, the source archive, and `SHA256SUMS`. Review the
-draft before publishing it in GitHub. The image job uses the repository's
-`GITHUB_TOKEN` to push to GHCR.
-
-If draft preparation fails, choose **Re-run failed jobs** on the original
-Actions run so it reuses the tested image and distribution files. If an
-interrupted upload left an incomplete asset in the draft, remove that asset
-before retrying.
-
-The Pi image runs on `linux/arm64` and installs the release wheel. Use the
-digest-pinned image reference from the release notes. For a local wheel-based
-build, place one BoilerIO wheel in a directory and build with:
-
-```sh
-docker buildx build --target image-wheel \
-  --build-context wheel-input=./path/to/wheel-directory --load -t boilerio:dev .
-```
-
-### Container image for the Raspberry Pi
-
-Build from this directory with `docker build -t boilerio:local .` on the Pi, or
-build a `linux/arm64` image with Docker Buildx. The image uses Python 3.14 and
-installs the locked core dependencies from `uv.lock`; it does not install the
-web or test extras. It runs as UID/GID 10001 and starts `scheduler` by default.
-
-Mount the host configuration file at `/etc/sensors/config` read-only. The
-scheduler also needs a writable mount at `/var/lib/boilerio` for its last-known
-zone, sensor, schedule, and gradient data, so it can restart while the web service
-is unavailable after a successful online run.
-Give UID 10001 write access to this directory on the host. The heating timezone
-is obtained from the server's `/system` endpoint; container `TZ` does not
-determine heating schedule times. Timezone, sensor, and zone configuration are
-validated together and saved atomically in `configuration`. If any configuration
-request fails or the responses are incompatible, startup uses the entire previous
-snapshot without modifying it. The first startup needs a successful online
-configuration refresh to create this snapshot.
-Invalid or incomplete snapshots are ignored as a whole when loading fallback data.
-Fallback age is preserved across restarts. The monitor uses its own
-`monitor-configuration` snapshot, and each daemon reads and writes only its own snapshot.
-The schedule is cached as `schedule` and each zone's gradients as `gradients-<id>`.
-Failed schedule and gradient fetches retry at most once per minute and retain the
-last valid data. Successful schedule fetches refresh every minute; gradients
-refresh hourly. Invalid responses do not replace these caches. Without a cached
-or online schedule, zone control waits until a schedule becomes available.
-
-On every startup, before enabling control, the scheduler attempts to refresh timezone, sensor,
-zone, weather, schedule, and gradient data. Requests have a 10-second timeout;
-the two startup refresh phases share a 30-second overall waiting budget.
-The configuration phase waits at most 10 seconds, then schedules, gradients,
-and optional weather refresh together. Independent requests run concurrently.
-Failed or unfinished refreshes use validated disk backups, logging their age.
-Fetch workers return candidates; only startup selects and publishes them.
-Late startup results cannot change disk or live data or suppress runtime retries.
-Without valid timezone, sensor, and zone configuration, startup fails and the
-service manager can retry. Weather and gradient data are optional.
-The monitor loads the same timezone, sensor, and zone configuration, plus optional weather.
-
-After startup, HTTP fetches and uploads run in separate background worker pools.
-Each heating iteration shares a five-second waiting budget across schedule, gradient,
-and weather refreshes before using cached data. Unfinished fetches continue in
-the background and can be collected on a later iteration. MQTT callbacks read
-cached values without waiting for HTTP. Pending sensor readings are coalesced
-per sensor and metric, and zone reports retain the newest state until an upload succeeds. This bounds
-the backlog during outages; intermediate unsent readings may be superseded.
-Sensor uploads preserve the original reading timestamps and use a 10-second
-timeout. Shutdown discards queued uploads rather than waiting for remote peers.
-
-The configuration must include the `[mqtt]`, `[heating]`, and `[weather]`
-sections; the scheduler requires `scheduler_url`,
-`thermostat_schedule_change_topic`, and weather `apikey` and `location` in
-addition to the MQTT and demand topic settings below.
-
-Run a second instance of the same image for the serial interface by overriding
-the command with `boiler_to_mqtt /dev/ttyUSB0` and mapping the transceiver into
-the container at that path. The container user also needs access to the
-device's group (for example, through Compose `group_add`). The serial worker
-needs the MQTT and heating topic settings, but does not use the scheduler cache.
-
-### Raspberry Pi Quickstart to get MQTT-based on/off control working
-
-You can run these steps on a Raspberry Pi with a fresh SD card that has the Buster version of Raspbian.  You can ssh to the Raspberry Pi, then copy/paste these commands into the terminal.  You'll need a transceiver device such as a JeeLink with the `thermostat` firmware (available at https://github.com/adpeace/thermostat) plugged in to use this.
-
-```
-sudo apt install -y python3-pip git
-git clone https://github.com/adpeace/boilerio.git
-cd boilerio
-sudo pip3 install --upgrade pip  # good practise but not mandatory
-sudo pip3 install .
-sudo mkdir /etc/sensors
-sudo bash -c 'cat >/etc/sensors/config' <<EOF
-[mqtt]
-host = mqtt_hostname
-user = mqtt_username
-password = mqtt_password
-
-[heating]
-info_basetopic = heating/zone/info
-demand_request_topic = heating/zone/demand
-EOF
-```
-
-Now use a text editor such as `nano` to edit `/etc/sensors/config` and replace
-the MQTT server details with your own.
-
-Now run `boiler_to_mqtt /dev/ttyUSB0` (replacing `/dev/ttyUSB0` with the location
-of the Danfoss transceiver device, e.g. your JeeLink; JeeLink will probably show
-up at that device name though if you don't have other USB devices connected).
-
-## Timestamp and timezone rules
-
-The web server is the authority for the heating system's calendar. Set the
-required `HEATING_TIMEZONE` to an IANA timezone identifier in the Python
-settings file selected by `BOILERIO_SETTINGS` (see `example-settings.cfg`):
-
-```python
-HEATING_TIMEZONE = "Europe/London"
-```
-
-Use an IANA timezone identifier, not a fixed seasonal offset or an abbreviation
-such as BST. Startup fails for a missing/invalid zone or unavailable timezone
-data. Python's `zoneinfo` uses installed system timezone data; install `tzdata`
-on hosts that do not already provide it. The scheduler image includes it.
-Keep timezone data up to date on the server and scheduler.
-
-An authenticated call to `GET /system` returns the configured timezone:
-
-```json
-{"timezone": "Europe/London"}
-```
-
-The scheduler will cache the response in case the server is later unavailable/temporarily offline.
-
-### Rules
-
-* Apart from the schedule times, all times in the API are handled as timezone-aware datetimes with offsets recorded.
-* The backend stores and returns these timestamps in UTC.
-* The API takes ISO-formatted datetimes with explicit offset (e.g. +00:00) as input and handles time offsets correctly.
-* Schedule times are timezoneless and interpreted by the device and backend in the heating timezone returned by GET /system.
-
-## Overview
-
-The end-to-end application comes in three parts:
-
-1.  The web app backend.  This is the `schedulerweb` Flask app.  It presents a
-    REST API for managing a heating schedule, and is used both by the "device"
-    implementation (that translates it into boiler on/off commands and typically
-    runs "on-site") and the user interface (which is a web app).  The
-    recommended configuration is for this to be proxied through nginx and run
-    inside uwsgi.  It uses postgres as a storage backend and assumes a database and role exists called `scheduler`.
-
-2.  The thermostat controller.  This is the `scheduler` Python script.  Ensure
-    this daemon is running to control the boiler relay and update the cache of
-    the current temperature in the backend web app.
-
-3.  The web-based UI.  This talks to the schedulerweb app and presents a UI
-    where the current temperature and schedule can be configured.  It is in a separate repository, `boilerio-ui`.
-
-### The web app backend
-
-To run the scheduler flask application for development, using `flask run`:
-
-```
-$ FLASK_APP=boilerio/schedulerweb/app.py BOILERIO_CONFIG=settings.cfg flask run
-```
-
-The settings file contains database and other configuration parameters.  An exmaple file is in "example-settings.cfg" but you should copy this and update it to suit your needs.
-
-To run in production, you will need to use a production webserver.  I use uWSGI
-behind nginx.  Here is an example uWSGI configuration for `schedulerweb`
-(assuming you have the Python package installed) - this can be placed in
-`/etc/uwsgi/apps-available` on Ubuntu's version of uwsgi:
-
-```
-[uwsgi]
-socket = /var/www/boilerio/thermostat.sock
-module = boilerio.schedulerweb:app
-logto = /var/log/uwsgi/boilerio/thermostat.log
-env = BOILERIO_SETTINGS=/etc/sensors/settings.cfg
-uid = boilerio
-gid = www-data
-chmod-socket = 664
-```
-
-This assumes you have placed your settings file in `/etc/sensors/settings.cfg`.
-
-### Zone status API
-
-`GET /zones/status` returns all configured zones with separate `desired` and
-`reported` objects. `GET /zones/<zone_id>/status` returns the same envelope for
-one zone, or 404 for an unknown zone. Both require the existing session or device
-authentication and honor `BASE_URL`.
-
-The envelope contains `as_of` (the UTC instant used to evaluate desired targets),
-`schedule_timezone` (the configured IANA zone), and `zones`. Each zone includes
-`zone_id`, `name`, `sensor_id`, and:
-
-- `desired.target_temperature`: the current scheduled or overridden target, or
-  null when neither is configured.
-- `desired.override`: an object with `temperature` and UTC `expires_at`, or null
-  when no unexpired override is requested.
-- `reported`: the last controller report, or null if there has never been one.
-  Fields are `received_at`, `target_temperature`, `current_temperature`,
-  `current_outside_temperature`, `controller_state`, `duty_cycle`,
-  `time_to_target` (seconds), and `override_active` (boolean, or null for older
-  reports that did not record the flag).
-
-Controller reports are sent on changes; `received_at` is not a heartbeat and
-does not establish that the controller is currently online.
-Failed uploads leave the latest local state pending and retry at most once per
-minute without terminating thermostat control. Desired settings
-can differ from reported settings while the scheduler fetches a change, normally
-within its 60-second polling interval. Sensor readings are separately available
-through the bulk `GET /sensor/summary` endpoint. Weekly schedule times from
-`GET /schedule` are interpreted in `schedule_timezone`.
-
-The legacy `GET /summary` and existing reported-state GET response are unchanged.
-New status reads use the `target_overridden` column already present in
-`scheduler.sql`; no database migration is required for a database matching that
-schema. New controller reports must include a boolean `target_overridden`;
-historical reports can still have unknown values.
-
-### scheduler: The device/controller
-
-The local scheduler component provides the timer and thermostat behaviour: it
-gets the target temperature periodically from the web service and controls the
-boiler by sending messages to the boiler\_to\_mqtt program.
-
-The scheduler takes no arguments: the configuration will come from the web
-service.  In order to actuate a boiler, you will need something listening to
-MQTT to interface to the boiler relays: the boiler_to_mqtt script can do this.
-
-## Boiler control software: boiler\_to\_mqtt
-
-The `boiler_to_mqtt` script implements an MQTT-topic based interface on top
-of the serial protocol provided in the thermostat.git repository.  In short: it
-turns the boiler on and off via MQTT.  The serial interface in thermostat.git is
-designed to interact with a Danfoss RF thermostat receiver; if you wanted to use
-a different receiver you can substitute a different service.
-
-Ordinarily you'd leave this service running so that other services can turn the
-boiler on/off as needed.
-
-This service and others in this repository use a common configuration file.  See
-below for more information.
-
-You can send learn packets in a loop with a simple shell loop, if you have the
-mosquitto clients installed and are running the `boiler_to_mqtt.py` script:
-
-```
-echo -n "Learning mode - program boiler then hit enter... "
-while ! read -t 1 ; do
-    mosquitto_pub -h <host> -u <username> -P <passwd> -t heating/zone/demand \
-                  -m '{"command": "L", "thermostat": 47793}'
-done
-```
-
-## boilersim
-
-This is a trivial simulator intended to help debug and improve the thermostat.
-It follows a really simple heating/cooling model and generates a table as
-output.
-
-To run, use a command-line such as:
-
-```
-$ boilersim -r 18 19.5 600
-```
-
-The `-r` option introduces some random noise into the temperature readings
-generated by the simulation when passing them to the controller.
-
-The first positional argument is the starting indoor temperature to simulate.
-The second argument is the target temperature.  The third argument is
-the simulated runtime in minutes.
-
-This program produces logging output to stderr, and a space-separated output to
-stdout.  The output is similar to:
-
-```
-...
-1.0 0 0 17.9964773317 17.9876417779 0 0 0
-...
-```
-
-The columns are:
-
-1. The time into the simulation, in minutes
-2. The amount of time in that minute that the boiler was on for in the
-simulation.
-3. The current duty cycle of the boiler in the simulation.
-4. The current simulated room temperature
-5. The fake temperature reading passed to the controller including any error
-introduced by the `-r` option.
-6. The current value of the proportional term of the PID controller.
-7. The current value of the integral term of the PID controller.
-8. The current value of the differential term of the PID controller.
-
-You can use the `plot\_sim.gpi` gnuplot script to plot the output of the
-simulation.  E.g.:
-
-```
-$ boilersim -r 18 19.5 600  2>log >sim_data
-$ gnuplot plot_sim.gpi
-```
-
-The gnuplot script assumes the simulation output is saved to a file called
-`sim\_data`.
-
-# Config file
-
-Other than `boilersim`, a config file is needed for the programs here.  This is
-to help make them usable as daemons.
-
-```
-[mqtt]
-host = raspi.lan
-user = user
-password = imnottellingyou
-
-[heating]
-# Various MQTT topic names to use.  These can be anything but are specified in
-# the config in case you have other software that constrains your choices, and
-# ensures they are consistent across apps.
-
-info_basetopic = heating/zone/info
-demand_request_topic = heating/zone/demand
-thermostat_schedule_change_topic = heating/thermostat_control/update
-
-scheduler_db_host = hub.lan
-scheduler_db_name = scheduler
-scheduler_db_user = scheduler
-scheduler_db_password = imnottellingyou
-
-scheduler_url = https://your_url
-scheduler_username = your_user
-scheduler_password = imnottellingyou
-
-[weather]
-apikey = your_openweathermap_key
-location = London,UK
-```
+[![tests](https://github.com/adpeace/boilerio/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/adpeace/boilerio/actions/workflows/test.yml)
+[![Latest release](https://img.shields.io/github/v/release/adpeace/boilerio)](https://github.com/adpeace/boilerio/releases/latest)
+[![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fadpeace%2Fboilerio%2Fmaster%2Fpyproject.toml)](pyproject.toml)
+[![License](https://img.shields.io/github/license/adpeace/boilerio)](LICENSE)
+
+BoilerIO is an open-source software thermostat that replaces old, clunky, RF
+thermostats and gives you a modern, connected experience on older hardware.
+
+<p align="center">
+  <img src="docs/images/ui-overview.jpg" width="320"
+       alt="The BoilerIO web UI on a phone, showing two heating zones with current and target temperatures, an active override, and sensor readings">
+</p>
+
+Key features are:
+- Support for Danfoss RX1 or RX2 RF receivers – these are typically used with
+  the TPx000 series wireless room thermostats. Contributions welcome to add
+  support for other receivers.
+- [Web UI](https://github.com/adpeace/boilerio-ui), [Alexa
+  skill](https://github.com/adpeace/boilerio-alexa), and [Home
+  Assistant](https://github.com/adpeace/boilerio-home-assistant) plugins give you
+  a choice of ways to interact with your heating.
+- A modern RESTful API with token-based and Google Sign-In authentication for
+  programmatic access and support for multilple users.
+- Keeps running your heating even when the Internet is down by caching the
+  schedule and any overrides locally. You can also install the backend on your
+  local network if you prefer.
+- Modern PID-based control algorithm, rather than on/off control with
+  hysteresis, keeps the temperature more constant. BoilerIO learns the
+  parameters needed to maintain the temperature.
+
+BoilerIO has been running my own heating since 2017 with very few issues. It has
+extended the life of my Danfoss hardware that would otherwise have been replaced
+years ago. It's also helped me reduce my gas usage and carbon footprint by
+allowing me to turn off the heating when away longer than expected, or turn it
+back on just in time.
+
+For more information, please see [my blog](https://andyhacks.com). These posts
+tell the story of how BoilerIO was built:
+
+1. [Danfoss Wireless Thermostat Hacking – Part One](https://andyhacks.com/2017/01/14/danfoss-wireless-thermostat-hacking-part-one/) (January 2017)
+2. [Danfoss Wireless Thermostat Hacking – Part Two](https://andyhacks.com/2017/02/07/danfoss-wireless-thermostat-hacking-part-two/) (February 2017)
+3. [Boiler Control to Maintain a Set Temperature](https://andyhacks.com/2017/04/07/boiler-control-to-maintain-a-set-temperature/) (April 2017)
+4. [The BoilerIO Software Thermostat](https://andyhacks.com/2017/06/11/the-boilerio-software-thermostat/) (June 2017)
+5. [Controlling your heating from anywhere](https://andyhacks.com/2017/09/10/controlling-your-heating-from-anywhere/) (September 2017)
+6. [Heating season 2019 is here!](https://andyhacks.com/2019/12/27/heating-season-2019-is-here/) (December 2019)
+
+The older posts describe the software as it was then; for current setup
+instructions, see the [setup guide](docs/SETUP.md).
+
+## Hardware required for setup
+
+> [!WARNING]
+> No warranty is provided: please be careful if you are messing with your own
+> heating system.
+
+- A local computer such as a Raspberry Pi.
+- A [JeeLink](https://www.digitalsmarties.net/products/jeelink) 433MHz version
+  with the [thermostat/RF control
+  software](https://github.com/adpeace/thermostat.git) on it. The setup guide
+  will explain how to install this from a factory JeeLink, or you can use other
+  Arduino-compatible hardware and RF69 module.
+- A Danfoss RF receiver such as the RX1/RX2, or alternative if you're bringing
+  your own software.
+- At least one temperature sensor per zone you wish to control. This project
+  uses [emonTH](https://docs.openenergymonitor.org/emonth2/install.html)
+  sensors with emonhub, however you could use other sensors if you write bridge
+  code to publish the readings to MQTT in the expected format.
+
+## Documentation
+
+- [Getting Started/Setup](docs/SETUP.md) covers setting up the service for your own home from scratch, including detailed hardware requirements.
+- [Release process](docs/RELEASE.md) describes the steps involved in doing a release (targeted at maintainers).
+
+## Contributions
+
+Contributions are welcomed of code, issues and bug reports, documentation
+improvements, security fixes, etc. AI-assisted code is accepted provided it has
+been reviewed by a human before submission, that human is the submitter, and
+they can understand, answer questions about, and certify to the best of their
+knowledge the quality of the submission.
