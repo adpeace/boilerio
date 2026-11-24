@@ -21,18 +21,19 @@ def on_message(client, userdata, msg):
     if msg.topic != userdata['demand_topic']:
         return
 
+    # An exception escaping this callback would stop the MQTT client thread,
+    # silently ignoring every later command, so reject bad requests here.
     try:
         request = json.loads(msg.payload)
         request['thermostat'] = hex(int(request['thermostat'], 0))
-    except ValueError:
-        logging.error("Error parsing request")
+    except (ValueError, TypeError, KeyError):
+        logging.error("Error parsing request (the thermostat ID must be a "
+                      "string such as \"0xbab1\"): %r", msg.payload)
         return
 
-    if 'command' not in request or \
-       request['command'] not in ['O', 'X', 'L']:
-        logging.error("Invalid or no command specified")
-    if 'thermostat' not in request:
-        logging.error("Invalid or no thermostat ID specified")
+    if request.get('command') not in ['O', 'X', 'L']:
+        logging.error("Invalid or no command specified: %r", msg.payload)
+        return
     userdata['command_queue'].append(request)
     logging.debug("Queued command %s", str(request))
 
