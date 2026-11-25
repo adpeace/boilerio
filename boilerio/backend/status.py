@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from ..scheduler import SchedulerTemperaturePolicy
+from ..controller import SchedulerTemperaturePolicy
 from . import model
 
 

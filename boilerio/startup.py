@@ -8,7 +8,7 @@ import time
 from zoneinfo import ZoneInfo
 
 from .cached_resource import FetchRequest, fetch_startup, write_backup, log_backup_file_age
-from .schedulerweb.model import Zone
+from .backend.model import Zone
 from .tempsensor import EmonTHSensor
 
 logger = logging.getLogger(__name__)

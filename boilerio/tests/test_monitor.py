@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 import requests_mock
 from flask import Flask, request
-from boilerio.schedulerweb.util import csrf_protection
+from boilerio.backend.util import csrf_protection
 from .http_helpers import Clock, InlineWorker
 
 def test_none_to_on_transition_no_reading():

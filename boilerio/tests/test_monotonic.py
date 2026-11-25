@@ -6,12 +6,12 @@ from zoneinfo import ZoneInfo
 
 import requests_mock
 
-from boilerio import scheduler, tempsensor
+from boilerio import controller as controller_module, tempsensor
 from .http_helpers import Clock, InlineWorker, iterate_at
 
 
 def test_polling_uses_elapsed_seconds_and_keeps_policy_on_http_failure():
-    controller = scheduler.AllZoneController('http://scheduler', None, [],
+    controller = controller_module.AllZoneController('http://scheduler', None, [],
                                             ZoneInfo('Europe/London'), fetch_worker=InlineWorker(), clock=Clock())
     with requests_mock.Mocker() as requests:
         requests.get('http://scheduler/schedule', json={'schedule': {}, 'target_override': []})
@@ -60,8 +60,8 @@ def test_thermostat_freshness_uses_receipt_tick_not_sensor_wall_time():
 def test_boiler_reissues_commands_after_elapsed_timeout(monkeypatch):
     mqtt = Mock()
     ticks = iter([0, 119, 121])
-    monkeypatch.setattr(scheduler.time, 'monotonic', lambda: next(ticks))
-    boiler = scheduler.MqttBoiler(1, mqtt, 'demand')
+    monkeypatch.setattr(controller_module.time, 'monotonic', lambda: next(ticks))
+    boiler = controller_module.MqttBoiler(1, mqtt, 'demand')
     boiler.on()
     boiler.on()
     assert mqtt.publish.call_count == 1

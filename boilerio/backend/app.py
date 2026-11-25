@@ -22,7 +22,7 @@ from .sensors import api as sensors_api
 from .util import get_db, csrf_protection
 from ..version import software_version
 
-from ..scheduler import SchedulerTemperaturePolicy
+from ..controller import SchedulerTemperaturePolicy
 
 
 logging.basicConfig(level=logging.INFO)

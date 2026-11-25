@@ -13,8 +13,8 @@ def scripts():
 
 def test_commands_have_boilerio_names():
     assert scripts() == {
-        'boilerio-controller': 'boilerio.scheduler:main',
-        'boilerio-danfoss-bridge': 'boilerio.boiler_to_mqtt:main',
+        'boilerio-controller': 'boilerio.controller:main',
+        'boilerio-danfoss-bridge': 'boilerio.danfoss_bridge:main',
         'boilersim': 'boilerio.boilersim:main',
     }
 

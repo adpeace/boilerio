@@ -14,7 +14,7 @@ from pathlib import Path
 import paho.mqtt.client as mqtt
 from requests.auth import HTTPBasicAuth
 
-from .schedulerweb import model # XXX
+from .backend import model # XXX
 from . import config
 from . import thermostat
 from . import update_sensor

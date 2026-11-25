@@ -13,7 +13,7 @@ from unittest.mock import Mock
 import pytest
 import requests
 
-from boilerio import cached_resource, scheduler, startup, tempsensor, update_sensor, zones
+from boilerio import cached_resource, controller as controller_module, startup, tempsensor, update_sensor, zones
 from boilerio.background import WorkerPool
 from boilerio.cached_resource import CachedResource, refresh_startup
 from boilerio.weather import WEATHER_API_ENDPOINT
@@ -73,7 +73,7 @@ def build_controller(cache_dir, workers, mqtt, clock=time.monotonic):
     conf = RawConfigParser()
     conf.read_dict({'heating': {'demand_request_topic': 'demand'},
                     'weather': {'apikey': 'key', 'location': 'London,UK'}})
-    return scheduler.build_controller(conf, URL, None, mqtt, *workers,
+    return controller_module.build_controller(conf, URL, None, mqtt, *workers,
                                       cache_dir=cache_dir, clock=clock)
 
 

@@ -45,16 +45,16 @@ web = [
 test = ["boilerio[web]", "pytest>=8", "requests-mock>=1.11", "mock>=5"]
 
 [project.scripts]
-boilerio-controller = "boilerio.scheduler:main"
-boilerio-danfoss-bridge = "boilerio.boiler_to_mqtt:main"
+boilerio-controller = "boilerio.controller:main"
+boilerio-danfoss-bridge = "boilerio.danfoss_bridge:main"
 boilersim = "boilerio.boilersim:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["boilerio"]
-exclude = ["/boilerio/tests", "/boilerio/schedulerweb/tests"]
+exclude = ["/boilerio/tests", "/boilerio/backend/tests"]
 
 [tool.hatch.build.targets.sdist]
 include = ["boilerio", "README.md", "LICENSE"]
 
 [tool.pytest.ini_options]
-testpaths = ["boilerio/tests", "boilerio/schedulerweb/tests"]
+testpaths = ["boilerio/tests", "boilerio/backend/tests"]

@@ -2,8 +2,8 @@
 
 Run with the backend's settings file selected, as for the web application:
 
-    BOILERIO_SETTINGS=/path/to/settings.cfg python -m boilerio.schedulerweb.admin add-user GOOGLE_ID
-    BOILERIO_SETTINGS=/path/to/settings.cfg python -m boilerio.schedulerweb.admin add-api-key
+    BOILERIO_SETTINGS=/path/to/settings.cfg python -m boilerio.backend.admin add-user GOOGLE_ID
+    BOILERIO_SETTINGS=/path/to/settings.cfg python -m boilerio.backend.admin add-api-key
 """
 
 import argparse

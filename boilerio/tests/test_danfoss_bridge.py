@@ -3,13 +3,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from .. import boiler_to_mqtt
+from .. import danfoss_bridge
 
 
 def deliver(payload, topic='heating/demand'):
     userdata = {'demand_topic': 'heating/demand', 'command_queue': []}
     msg = MagicMock(topic=topic, payload=payload)
-    boiler_to_mqtt.on_message(None, userdata, msg)
+    danfoss_bridge.on_message(None, userdata, msg)
     return userdata['command_queue']
 
 
@@ -38,7 +38,7 @@ def test_on_message_ignores_other_topics():
 
 def test_run_opens_passed_device_path(monkeypatch):
     client = MagicMock()
-    monkeypatch.setattr(boiler_to_mqtt.mqtt, 'Client', lambda *args, **kwargs: client)
+    monkeypatch.setattr(danfoss_bridge.mqtt, 'Client', lambda *args, **kwargs: client)
     monkeypatch.setattr(sys, 'argv', ['boilerio-danfoss-bridge', '/dev/wrong-device'])
 
     class StopBeforeSerialLoop(Exception):
@@ -48,9 +48,9 @@ def test_run_opens_passed_device_path(monkeypatch):
         assert (path, baudrate, timeout) == ('/dev/ttyUSB0', 57600, 0.5)
         raise StopBeforeSerialLoop
 
-    monkeypatch.setattr(boiler_to_mqtt.serial, 'Serial', open_serial)
+    monkeypatch.setattr(danfoss_bridge.serial, 'Serial', open_serial)
 
     with pytest.raises(StopBeforeSerialLoop):
-        boiler_to_mqtt.run('mqtt.local', 'user', 'password', 'heating/info',
+        danfoss_bridge.run('mqtt.local', 'user', 'password', 'heating/info',
                            'heating/demand', '/dev/ttyUSB0')
     client.loop_stop.assert_called_once()

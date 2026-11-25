@@ -62,7 +62,7 @@ def test_override_duration_and_both_response_formats(client, monkeypatch, start)
 
 def test_summary_uses_heating_calendar_and_matches_scheduler(client, monkeypatch):
     from datetime import time
-    from ...scheduler import SchedulerTemperaturePolicy
+    from ...controller import SchedulerTemperaturePolicy
     now = datetime.fromisoformat('2026-07-05T23:30:00+00:00')  # Monday in London, Sunday in UTC.
     schedule = model.FullSchedule([(0, time(0), 1, 20), (6, time(0), 1, 15)])
     clock = Mock(wraps=app.datetime)

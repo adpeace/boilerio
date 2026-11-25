@@ -6,8 +6,8 @@ import json
 from zoneinfo import ZoneInfo
 from unittest.mock import Mock
 
-from .. import scheduler
-from ..schedulerweb import model
+from .. import controller as controller_module
+from ..backend import model
 import requests_mock
 import pytest
 
@@ -15,7 +15,7 @@ from .http_helpers import Clock, InlineWorker, iterate_at
 
 
 def make_controller(*args, **kwargs):
-    return scheduler.AllZoneController(*args, fetch_worker=InlineWorker(), clock=Clock(), **kwargs)
+    return controller_module.AllZoneController(*args, fetch_worker=InlineWorker(), clock=Clock(), **kwargs)
 
 
 LONDON = ZoneInfo("Europe/London")
@@ -100,7 +100,7 @@ def test_invalid_schedule_temperature_is_rejected_before_control(temperature):
     payload = {'schedule': {'0': [{'when': '00:00', 'zones': [{'zone': 1, 'temp': temperature}]}]},
                'target_override': []}
     with pytest.raises(ValueError, match='finite temperature'):
-        scheduler.SchedulerTemperaturePolicy.from_json(json.dumps(payload), LONDON)
+        controller_module.SchedulerTemperaturePolicy.from_json(json.dumps(payload), LONDON)
 
 def test_from_json_one_override():
     """Check JSON parsing for simple configuration with one override."""
@@ -112,7 +112,7 @@ def test_from_json_one_override():
             {"zone": 1, "temp": 22, "until": "2018-10-10T10:10:00+00:00"}
         ]
     }"""
-    schedule = scheduler.SchedulerTemperaturePolicy.from_json(
+    schedule = controller_module.SchedulerTemperaturePolicy.from_json(
         schedule_json_one_override, LONDON)
     assert schedule.target(instant(2018, 1, 1, 0, 0), 1) == 22
     assert schedule.target(instant(2018, 1, 1, 0, 0), 2) == None
@@ -132,7 +132,7 @@ def test_from_json_simple_schedule():
                       "2": [], "3": [], "4": [], "5": [], "6": [] },
         "target_override": []
     }"""
-    schedule = scheduler.SchedulerTemperaturePolicy.from_json(
+    schedule = controller_module.SchedulerTemperaturePolicy.from_json(
         schedule_json_one_override, LONDON)
     # Monday at 11:00 should be 19
     assert schedule.target(instant(2018, 12, 3, 11, 0), 1) == 19
@@ -144,7 +144,7 @@ def test_empty_day_carries_forward_last_entry():
 
     Check that a day with no entries gets the entry from the
     previous day carried forward as a midnight-tomorrow event."""
-    schedule = scheduler.SchedulerTemperaturePolicy(
+    schedule = controller_module.SchedulerTemperaturePolicy(
         model.FullSchedule([
             (0, time(12, 0), 1, 20),
             (2, time(0, 0), 1, 22)]),
@@ -166,7 +166,7 @@ def test_empty_day_carries_forward_last_entry():
 
 def test_zones_dont_interfere():
     """Check target when two zones change simultaneously/"""
-    schedule = scheduler.SchedulerTemperaturePolicy(
+    schedule = controller_module.SchedulerTemperaturePolicy(
         model.FullSchedule([
             (0, time(12, 0), 1, 20),
             (0, time(12, 0), 2, 22)]),
@@ -193,7 +193,7 @@ def test_zones_changing_simultaneously():
                       "1": [], "2": [], "3": [], "4": [], "5": [], "6": [] },
         "target_override": []
     }"""
-    schedule = scheduler.SchedulerTemperaturePolicy.from_json(
+    schedule = controller_module.SchedulerTemperaturePolicy.from_json(
         schedule_json_changing_simultaneously, LONDON)
 
     # Monday at 10:30 should be 19 in zone 1
@@ -206,13 +206,13 @@ def test_zones_changing_simultaneously():
 
 def test_no_schedule_returns_no_target():
     """Check no target returned if schedule and override are empty."""
-    schedule = scheduler.SchedulerTemperaturePolicy(
+    schedule = controller_module.SchedulerTemperaturePolicy(
         model.FullSchedule([]), None, LONDON)
     assert schedule.target(instant(2017, 1, 1, 0, 0), 1) == None
 
 def test_scheduler_from_json_empty_schedule():
     """Check policy creation from JSON with empty schedule."""
-    scheduler.SchedulerTemperaturePolicy.from_json(
+    controller_module.SchedulerTemperaturePolicy.from_json(
         EMPTY_SCHEDULE_RESPONSE, LONDON)
 
 
@@ -221,7 +221,7 @@ def test_scheduler_from_json_empty_schedule():
     ('2026-07-06T05:59:00+00:00', '2026-07-06T06:00:00+00:00'),
 ])
 def test_weekly_schedule_stays_at_seven_local(before, after):
-    policy = scheduler.SchedulerTemperaturePolicy(
+    policy = controller_module.SchedulerTemperaturePolicy(
         model.FullSchedule([(0, time(7), 1, 20), (0, time(22), 1, 15)]), [],
         ZoneInfo('Europe/London'))
     assert policy.target(datetime.fromisoformat(before), 1) == 15
@@ -229,7 +229,7 @@ def test_weekly_schedule_stays_at_seven_local(before, after):
 
 
 def test_spring_gap_and_repeated_autumn_hour_follow_local_clock():
-    policy = scheduler.SchedulerTemperaturePolicy(
+    policy = controller_module.SchedulerTemperaturePolicy(
         model.FullSchedule([(6, time(0), 1, 15), (6, time(1, 30), 1, 20)]), [],
         ZoneInfo('Europe/London'))
     for instant, expected in [
@@ -243,7 +243,7 @@ def test_spring_gap_and_repeated_autumn_hour_follow_local_clock():
 def test_override_expiry_is_instant_based_and_retains_seconds():
     end = datetime.fromisoformat('2026-10-25T01:30:20.123456+00:00')
     override = model.TargetOverride(end, 23, 1)
-    policy = scheduler.SchedulerTemperaturePolicy.from_json(
+    policy = controller_module.SchedulerTemperaturePolicy.from_json(
         json.dumps({'schedule': {}, 'target_override': [override.to_dict()]}),
         ZoneInfo('Europe/London'))
     assert policy.target(end - timedelta(microseconds=1), 1) == 23
@@ -257,7 +257,7 @@ def test_override_expiry_with_shared_named_timezone_during_repeated_hour():
     zone = ZoneInfo('Europe/London')
     end = datetime(2026, 10, 25, 1, 45, tzinfo=zone, fold=0)
     now = datetime(2026, 10, 25, 1, 15, tzinfo=zone, fold=1)
-    policy = scheduler.SchedulerTemperaturePolicy(
+    policy = controller_module.SchedulerTemperaturePolicy(
         model.FullSchedule([]), [model.TargetOverride(end, 23, 1)], zone)
     # The first 01:45 has already passed by the second 01:15.
     assert not policy.target_overridden(now, 1)

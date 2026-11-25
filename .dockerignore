@@ -4,7 +4,7 @@
 venv
 __pycache__
 boilerio/tests
-boilerio/schedulerweb/tests
+boilerio/backend/tests
 *.pyc
 *.pyo
 *.egg-info
