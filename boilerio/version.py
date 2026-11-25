@@ -1,8 +1,8 @@
 """Report the running software version.
 
-Kept free of any web-framework imports so the client-side daemons (scheduler,
-monitor, boiler_to_mqtt) can log their version at startup as cheaply as the web
-app reports it via /version.
+Kept free of any web-framework imports so the client-side daemons
+(boilerio-controller, monitor, boilerio-danfoss-bridge) can log their version
+at startup as cheaply as the web app reports it via /version.
 """
 import os
 import subprocess

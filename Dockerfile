@@ -33,7 +33,7 @@ RUN uv pip install --no-deps --no-index /wheels/boilerio-*.whl && uv pip check
 # Release image.
 FROM runtime AS image-wheel
 COPY --from=venv-wheel /app/.venv /app/.venv
-CMD ["scheduler"]
+CMD ["boilerio-controller"]
 
 # --- Source path: image built from the checkout ---
 
@@ -46,4 +46,4 @@ RUN uv sync --locked --no-dev --no-default-groups --no-editable
 # target for a bare `docker build`.
 FROM runtime AS image-source
 COPY --from=venv-source /app/.venv /app/.venv
-CMD ["scheduler"]
+CMD ["boilerio-controller"]

@@ -14,9 +14,9 @@ def make_db(fetchone):
     return db, cursor
 
 
-def test_add_device_credentials_authenticate():
+def test_add_api_key_credentials_authenticate():
     db, cursor = make_db((7,))
-    device_id, secret = admin.add_device(db)
+    device_id, secret = admin.add_api_key(db)
     assert device_id == 7
     db.commit.assert_called_once()
 
@@ -31,9 +31,9 @@ def test_add_device_credentials_authenticate():
         auth.hash_password(secret + 'x', device.salt).decode(), device.device_secret_hashed)
 
 
-def test_add_device_generates_distinct_secrets():
+def test_add_api_key_generates_distinct_secrets():
     db, _ = make_db((1,))
-    assert admin.add_device(db)[1] != admin.add_device(db)[1]
+    assert admin.add_api_key(db)[1] != admin.add_api_key(db)[1]
 
 
 def test_add_user(monkeypatch):
@@ -55,7 +55,7 @@ def test_add_user_rejects_duplicate(monkeypatch):
     db.commit.assert_not_called()
 
 
-def test_main_add_device_prints_config(monkeypatch, tmp_path, capsys):
+def test_main_add_api_key_prints_key_and_config(monkeypatch, tmp_path, capsys):
     settings = tmp_path / 'settings.cfg'
     settings.write_text("DB_HOST='h'\nDB_NAME='n'\nDB_USER='u'\nDB_PASSWORD='p'\n")
     monkeypatch.setenv('BOILERIO_SETTINGS', str(settings))
@@ -63,9 +63,10 @@ def test_main_add_device_prints_config(monkeypatch, tmp_path, capsys):
     connected = []
     monkeypatch.setattr(model, 'db_connect',
                         lambda *a: connected.append(a) or db)
-    admin.main(['add-device'])
+    admin.main(['add-api-key'])
     assert connected == [('h', 'n', 'u', 'p')]
     out = capsys.readouterr().out
+    assert 'API key ID:     5' in out
     assert 'scheduler_username = 5' in out
     assert 'scheduler_password = ' in out
     db.close.assert_called_once()

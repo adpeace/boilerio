@@ -247,7 +247,7 @@ def build_controller(conf, scheduler_url, auth, mqttc, fetch_worker, upload_work
     return controller, configuration.sensors
 
 def main():
-    logger.info("Starting boilerio scheduler %s", software_version())
+    logger.info("Starting boilerio-controller %s", software_version())
     conf = config.load_config()
 
     # If the 'heating' section of the config has a 'scheduler_username' and

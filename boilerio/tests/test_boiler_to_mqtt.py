@@ -39,7 +39,7 @@ def test_on_message_ignores_other_topics():
 def test_run_opens_passed_device_path(monkeypatch):
     client = MagicMock()
     monkeypatch.setattr(boiler_to_mqtt.mqtt, 'Client', lambda *args, **kwargs: client)
-    monkeypatch.setattr(sys, 'argv', ['boiler_to_mqtt', '/dev/wrong-device'])
+    monkeypatch.setattr(sys, 'argv', ['boilerio-danfoss-bridge', '/dev/wrong-device'])
 
     class StopBeforeSerialLoop(Exception):
         pass

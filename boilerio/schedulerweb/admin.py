@@ -3,7 +3,7 @@
 Run with the backend's settings file selected, as for the web application:
 
     BOILERIO_SETTINGS=/path/to/settings.cfg python -m boilerio.schedulerweb.admin add-user GOOGLE_ID
-    BOILERIO_SETTINGS=/path/to/settings.cfg python -m boilerio.schedulerweb.admin add-device
+    BOILERIO_SETTINGS=/path/to/settings.cfg python -m boilerio.schedulerweb.admin add-api-key
 """
 
 import argparse
@@ -30,8 +30,9 @@ def add_user(db, google_subscriber_id, name, email):
     return user_id
 
 
-def add_device(db):
-    """Create device credentials; returns (device ID, secret)."""
+def add_api_key(db):
+    """Create an API key for the controller or another client such as Home
+    Assistant; returns (key ID, secret). Keys are stored in the device table."""
     secret = secrets.token_urlsafe(32)
     salt = auth.make_salt()
     cursor = db.cursor()
@@ -67,7 +68,9 @@ def main(argv=None):
                              help="Email address (updated from Google at sign-in)")
 
     commands.add_parser(
-        'add-device', help="Create credentials for a scheduler to use")
+        'add-api-key',
+        help="Create an API key for the controller or another client, such "
+             "as Home Assistant")
 
     args = parser.parse_args(argv)
 
@@ -85,11 +88,16 @@ def main(argv=None):
                 sys.exit(str(e))
             print(f"Created user {user_id}")
         else:
-            device_id, secret = add_device(db)
-            print("Created device. Put these in the scheduler's [heating] "
-                  "configuration; the secret cannot be shown again.")
-            print(f"scheduler_username = {device_id}")
+            key_id, secret = add_api_key(db)
+            print(f"API key ID:     {key_id}")
+            print(f"API key secret: {secret}")
+            print()
+            print("For the controller, put these lines in the [heating] section "
+                  "of its configuration file:")
+            print(f"scheduler_username = {key_id}")
             print(f"scheduler_password = {secret}")
+            print()
+            print("The secret is stored only as a hash and cannot be shown again.")
     finally:
         db.close()
 

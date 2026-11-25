@@ -110,10 +110,11 @@ def run(mqtt_host, mqtt_user, mqtt_password, zone_basetopic, demand_topic,
 
 
 def main():
-    logging.info("Starting boilerio boiler_to_mqtt %s", software_version())
+    logging.info("Starting boilerio-danfoss-bridge %s", software_version())
     parser = argparse.ArgumentParser(
-        description='Interface between MQTT and serial-controlled '
-                    'heating relay')
+        prog='boilerio-danfoss-bridge',
+        description='Bridge MQTT on/off requests to a Danfoss RF receiver '
+                    'through a JeeLink running the thermostat firmware')
     parser.add_argument('device_path',
                         help="Path to serial device for relay controller, "
                              "e.g. /dev/ttyUSB0")

@@ -19,8 +19,8 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3.15",
 ]
-# Core runtime deps are what the client-side daemons (scheduler, monitor,
-# boiler_to_mqtt) need.  The web app's deps live in the [web] extra so the Pi
+# Core runtime deps are what the client-side daemons (controller, monitor,
+# Danfoss bridge) need.  The web app's deps live in the [web] extra so the Pi
 # does not have to install (or build) Flask, psycopg2, or the Google-auth stack.
 dependencies = [
     "requests>=2.31",
@@ -45,9 +45,9 @@ web = [
 test = ["boilerio[web]", "pytest>=8", "requests-mock>=1.11", "mock>=5"]
 
 [project.scripts]
-scheduler = "boilerio.scheduler:main"
+boilerio-controller = "boilerio.scheduler:main"
+boilerio-danfoss-bridge = "boilerio.boiler_to_mqtt:main"
 boilersim = "boilerio.boilersim:main"
-boiler_to_mqtt = "boilerio.boiler_to_mqtt:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["boilerio"]
