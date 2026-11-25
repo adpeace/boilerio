@@ -16,19 +16,19 @@ def make_db(fetchone):
 
 def test_add_api_key_credentials_authenticate():
     db, cursor = make_db((7,))
-    device_id, secret = admin.add_api_key(db)
-    assert device_id == 7
+    api_key_id, secret = admin.add_api_key(db)
+    assert api_key_id == 7
     db.commit.assert_called_once()
 
-    # Read the stored row back as the web app's device login does.
+    # Read the stored row back as the server's API key login does.
     hashed, salt = cursor.execute.call_args.args[1]
     cursor.rowcount = 1
     cursor.fetchone.return_value = (7, hashed, salt)
-    device = model.EndpointIdentity.get_device_by_id(db, 7)
+    api_key = model.ApiKey.get_by_id(db, 7)
     assert hmac.compare_digest(
-        auth.hash_password(secret, device.salt).decode(), device.device_secret_hashed)
+        auth.hash_password(secret, api_key.salt).decode(), api_key.secret_hashed)
     assert not hmac.compare_digest(
-        auth.hash_password(secret + 'x', device.salt).decode(), device.device_secret_hashed)
+        auth.hash_password(secret + 'x', api_key.salt).decode(), api_key.secret_hashed)
 
 
 def test_add_api_key_generates_distinct_secrets():

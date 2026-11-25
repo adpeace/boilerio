@@ -34,6 +34,33 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: api_key; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.api_key (
+    api_key_id integer NOT NULL,
+    secret_hashed character varying(256) NOT NULL,
+    salt character varying(64) NOT NULL
+);
+
+
+ALTER TABLE public.api_key OWNER TO postgres;
+
+--
+-- Name: api_key_api_key_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.api_key ALTER COLUMN api_key_id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.api_key_api_key_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: clientsecrets; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -43,33 +70,6 @@ CREATE TABLE public.clientsecrets (
 
 
 ALTER TABLE public.clientsecrets OWNER TO postgres;
-
---
--- Name: device; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.device (
-    device_id integer NOT NULL,
-    device_secret_hashed character varying(256) NOT NULL,
-    salt character varying(64) NOT NULL
-);
-
-
-ALTER TABLE public.device OWNER TO postgres;
-
---
--- Name: device_device_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.device ALTER COLUMN device_id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.device_device_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
-);
-
 
 --
 -- Name: device_reported_state; Type: TABLE; Schema: public; Owner: postgres
@@ -304,6 +304,14 @@ ALTER TABLE ONLY public.zones ALTER COLUMN zone_id SET DEFAULT nextval('public.z
 
 
 --
+-- Name: api_key api_key_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.api_key
+    ADD CONSTRAINT api_key_pkey PRIMARY KEY (api_key_id);
+
+
+--
 -- Name: clientsecrets clientsecrets_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -431,24 +439,24 @@ ALTER TABLE ONLY public.override
 
 
 --
+-- Name: TABLE api_key; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.api_key TO scheduler;
+
+
+--
+-- Name: SEQUENCE api_key_api_key_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.api_key_api_key_id_seq TO scheduler;
+
+
+--
 -- Name: TABLE clientsecrets; Type: ACL; Schema: public; Owner: postgres
 --
 
 GRANT ALL ON TABLE public.clientsecrets TO scheduler;
-
-
---
--- Name: TABLE device; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.device TO scheduler;
-
-
---
--- Name: SEQUENCE device_device_id_seq; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON SEQUENCE public.device_device_id_seq TO scheduler;
 
 
 --

@@ -60,7 +60,7 @@ def before_request():
 
 
 def load_user_from_request(request):
-    """Authorize devices using HTTP basic auth."""
+    """Authorize API key holders using HTTP basic auth."""
     auth_header = request.headers.get("Authorization")
     if auth_header is None:
         return None
@@ -70,7 +70,7 @@ def load_user_from_request(request):
     except basicauth.DecodeError:
         return None
 
-    # Usernames for devices are device IDs: integers
+    # The username is the API key's ID, an integer.
     try:
         username = int(username)
     except ValueError:
@@ -79,12 +79,12 @@ def load_user_from_request(request):
     # Check the username/password provided:
     db = get_db()
     try:
-        endpoint = model.EndpointIdentity.get_device_by_id(db, username)
+        api_key = model.ApiKey.get_by_id(db, username)
     except ValueError:
         return None
 
-    hashed_password = auth.hash_password(password, endpoint.salt)
-    if hmac.compare_digest(hashed_password.decode(), endpoint.device_secret_hashed):
+    hashed_password = auth.hash_password(password, api_key.salt)
+    if hmac.compare_digest(hashed_password.decode(), api_key.secret_hashed):
         return auth.Device()
     return None
 

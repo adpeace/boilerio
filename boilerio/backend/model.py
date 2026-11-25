@@ -362,33 +362,33 @@ class TemperatureGradientMeasurement(object):
             } for record in cursor]
 
 
-class EndpointIdentity(object):
-    """Authentication information stored for endpoints in a home.
+class ApiKey(object):
+    """An API key used by the controller and other clients, such as Home
+    Assistant, to access the API with HTTP basic auth.
 
-    Valid crednetials authorize their user to access the API.
+    Only a salted hash of the secret is stored.
     """
 
-    def __init__(self, device_id, device_secret_hashed, salt):
-        self.device_id = device_id
-        self.device_secret_hashed = device_secret_hashed
+    def __init__(self, api_key_id, secret_hashed, salt):
+        self.api_key_id = api_key_id
+        self.secret_hashed = secret_hashed
         self.salt = salt
 
     @classmethod
-    def get_device_by_id(cls, connection, device_id):
-        """Returns a device object given a device identifier.
-
-        This includes the hashed secret and salt for that device."""
+    def get_by_id(cls, connection, api_key_id):
+        """Returns the API key with this ID, including its hashed secret and
+        salt."""
         cursor = connection.cursor()
         cursor.execute(
-            "select device_id, device_secret_hashed, salt "
-            "from device where device_id=%s", (device_id,)
+            "select api_key_id, secret_hashed, salt "
+            "from api_key where api_key_id=%s", (api_key_id,)
         )
         if cursor.rowcount != 1:
-            raise ValueError("Device not found")
+            raise ValueError("API key not found")
         else:
-            device_id, device_secret_hashed, salt = cursor.fetchone()
+            api_key_id, secret_hashed, salt = cursor.fetchone()
             salt = base64.b64decode(salt)
-            return cls(device_id, device_secret_hashed, salt)
+            return cls(api_key_id, secret_hashed, salt)
 
 
 def client_secret_is_valid(db, secret):

@@ -32,17 +32,17 @@ def add_user(db, google_subscriber_id, name, email):
 
 def add_api_key(db):
     """Create an API key for the controller or another client such as Home
-    Assistant; returns (key ID, secret). Keys are stored in the device table."""
+    Assistant; returns (key ID, secret)."""
     secret = secrets.token_urlsafe(32)
     salt = auth.make_salt()
     cursor = db.cursor()
     cursor.execute(
-        "insert into device (device_secret_hashed, salt) "
-        "values (%s, %s) returning device_id",
+        "insert into api_key (secret_hashed, salt) "
+        "values (%s, %s) returning api_key_id",
         (auth.hash_password(secret, salt).decode(), base64.b64encode(salt).decode()))
-    device_id = cursor.fetchone()[0]
+    api_key_id = cursor.fetchone()[0]
     db.commit()
-    return device_id, secret
+    return api_key_id, secret
 
 
 def connect(settings):
