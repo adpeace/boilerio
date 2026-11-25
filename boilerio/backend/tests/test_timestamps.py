@@ -72,7 +72,7 @@ def test_summary_uses_heating_calendar_and_matches_scheduler(client, monkeypatch
     monkeypatch.setattr(model.FullSchedule, 'from_db', lambda *args: schedule)
     monkeypatch.setattr(model.Zone, 'all_from_db', lambda *args: [model.Zone(1, 'Room', '0x1', 1)])
     monkeypatch.setattr(model.TargetOverride, 'from_db', lambda *args: [])
-    monkeypatch.setattr(model.DeviceState, 'last_from_db', lambda *args: None)
+    monkeypatch.setattr(model.ControllerState, 'last_from_db', lambda *args: None)
     result = client.get('/summary').json
     policy = SchedulerTemperaturePolicy(schedule, [], ZoneInfo('Europe/London'))
     assert result['server_day_of_week'] == 0

@@ -17,7 +17,7 @@ from http import HTTPStatus
 import basicauth
 
 from . import model, auth, google_token
-from .zones import a_device_state, api as zones_api
+from .zones import a_controller_state, api as zones_api
 from .sensors import api as sensors_api
 from .util import get_db, csrf_protection
 from ..version import software_version
@@ -85,7 +85,7 @@ def load_user_from_request(request):
 
     hashed_password = auth.hash_password(password, api_key.salt)
     if hmac.compare_digest(hashed_password.decode(), api_key.secret_hashed):
-        return auth.Device()
+        return auth.ApiKeyClient()
     return None
 
 
@@ -274,8 +274,8 @@ def get_summary():
         zid = zone['zone_id']
 
         zone['target'] = scheduler.target(now, zid)
-        reported_state = model.DeviceState.last_from_db(db, zid)
-        zone['reported_state'] = marshal(reported_state, a_device_state)
+        reported_state = model.ControllerState.last_from_db(db, zid)
+        zone['reported_state'] = marshal(reported_state, a_controller_state)
 
         # We may have a stale override so check that the target is actually
         # being overriden:

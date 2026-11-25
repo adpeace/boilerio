@@ -17,7 +17,7 @@ def test_sensor_from_db_missing_raises():
 
 @pytest.mark.parametrize('construct,attribute', [
     (lambda when: model.TargetOverride(when, 20, 1), 'end'),
-    (lambda when: model.DeviceState(when, 1, 'heating', 20, 18, None, 10, 1), 'received'),
+    (lambda when: model.ControllerState(when, 1, 'heating', 20, 18, None, 10, 1), 'received'),
     (lambda when: model.SensorReading(1, when, 'temperature', 20), 'when'),
     (lambda when: model.TemperatureGradientMeasurement(1, when, 10, 2), 'when'),
 ])

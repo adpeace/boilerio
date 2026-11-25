@@ -22,7 +22,7 @@ def zone_status(db, heating_timezone, zone_id=None, now=None):
     overrides = model.TargetOverride.from_db(db)
     policy = SchedulerTemperaturePolicy(schedule, overrides, heating_timezone)
     active_overrides = {override.zone: override for override in overrides if override.end > now}
-    reports = model.DeviceState.latest_for_zones(db, [zone.zone_id for zone in zones])
+    reports = model.ControllerState.latest_for_zones(db, [zone.zone_id for zone in zones])
     result = []
     for zone in zones:
         override = active_overrides.get(zone.zone_id)

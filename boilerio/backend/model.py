@@ -143,15 +143,15 @@ class TargetOverride(object):
                        (self.end, self.temp, self.zone))
 
 
-class DeviceState(object):
-    """The state reported by a device.
+class ControllerState(object):
+    """The state reported by the controller for a zone.
 
     Includes:
-     - 'received' - the date/time in UTC the device report was received.
-     - 'zone_id' - zone ID for the device.
-     - 'target' - the target temperature the device is using.
-     - 'current_temp' - the temperature the device currently sees (or None).
-     - 'current_outside_temp' - the temperature the device currently sees for
+     - 'received' - the date/time in UTC the controller's report was received.
+     - 'zone_id' - the zone the report is for.
+     - 'target' - the target temperature the controller is using.
+     - 'current_temp' - the zone temperature the controller currently sees (or None).
+     - 'current_outside_temp' - the outside temperature the controller currently sees for
                                 outside (or None).
      - 'time_to_target' - time to a new target (or None).
      - 'dutycycle' - floating point value between 0 and 1.

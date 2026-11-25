@@ -101,7 +101,7 @@ class Override(Resource):
 
         Returns no override if an override was in place but has expired."""
         # XXX we shouldn't be deciding on the server whether an override is
-        # active since it doesn't tell us whether the device is implementing it
+        # active since it doesn't tell us whether the controller is implementing it
         # or not.  This should move to target/reported state model.
         now = datetime.datetime.now(datetime.timezone.utc)
         db = get_db()
@@ -213,18 +213,18 @@ class GradientTable(Resource):
         return r
 
 
-a_device_state = api.model('Device reported state', {
+a_controller_state = api.model('Controller reported state', {
     'time_to_target': fields.Integer(
         description="Seconds until target reached."),
-    'state': fields.String(description="State of device."),
+    'state': fields.String(description="State of the controller for this zone."),
     'target': fields.Float(
-        description="Target the device is working towards."),
+        description="Target the controller is working towards."),
     'current_temp': fields.Float(
-        description="Current temperature reported by the device."),
+        description="Current temperature reported by the controller."),
     'target_overridden': fields.Boolean(
         descripton="Whether the target temperature has been overridden"),
     "current_outside_temp": fields.Float(
-        description="Current outside temperature reported by the device."),
+        description="Current outside temperature reported by the controller."),
     "dutycycle": fields.Float(description="Dutycycle for boiler"),
     })
 
@@ -232,25 +232,25 @@ a_device_state = api.model('Device reported state', {
 @api.route('/<int:zone_id>/reported_state')
 @api.param('zone_id', 'Zone ID for the time to target.')
 class ReportedState(Resource):
-    @api.expect(a_device_state)
+    @api.expect(a_controller_state)
     @csrf_protection
     def post(self, zone_id):
         db = get_db()
-        device_state = model.DeviceState(
+        controller_state = model.ControllerState(
                 datetime.datetime.now(datetime.timezone.utc),
                 zone_id, api.payload['state'], api.payload['target'],
                 api.payload['current_temp'], api.payload['time_to_target'],
                 api.payload['current_outside_temp'], api.payload['dutycycle'],
                 api.payload.get('target_overridden'))
-        device_state.save(db)
+        controller_state.save(db)
         db.commit()
 
-    @api.marshal_with(a_device_state)
+    @api.marshal_with(a_controller_state)
     def get(self, zone_id):
         db = get_db()
-        device_state = model.DeviceState.last_from_db(db, zone_id)
+        controller_state = model.ControllerState.last_from_db(db, zone_id)
         db.commit()
-        return device_state
+        return controller_state
 
 
 @api.route('/<int:zone_id>/schedule')

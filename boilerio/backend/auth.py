@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 # ---------------------------------------------------------------------
-# Device authentication
+# API key authentication
 
 def make_salt() -> bytes:
     return os.urandom(16)
@@ -27,9 +27,9 @@ def hash_password(password: str, salt: bytes) -> bytes:
     return base64.b64encode(h)
 
 
-class Device(UserMixin):
+class ApiKeyClient(UserMixin):
     def __init__(self):
-        self.id = "DEVICE"
+        self.id = "API_KEY"
 
 
 # ---------------------------------------------------------------------
