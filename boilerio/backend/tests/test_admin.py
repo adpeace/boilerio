@@ -67,6 +67,6 @@ def test_main_add_api_key_prints_key_and_config(monkeypatch, tmp_path, capsys):
     assert connected == [('h', 'n', 'u', 'p')]
     out = capsys.readouterr().out
     assert 'API key ID:     5' in out
-    assert 'scheduler_username = 5' in out
-    assert 'scheduler_password = ' in out
+    assert 'api_key_id = 5' in out
+    assert 'api_key_secret = ' in out
     db.close.assert_called_once()

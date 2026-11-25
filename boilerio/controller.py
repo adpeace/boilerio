@@ -182,18 +182,18 @@ class AllZoneController(object):
     SCHEDULER_UPDATE_INTERVAL = timedelta(seconds=60)
     FETCH_WAIT_SECONDS = 5
 
-    def __init__(self, scheduler_url, auth, zone_controllers, heating_timezone,
+    def __init__(self, backend_url, auth, zone_controllers, heating_timezone,
                  schedule_cache_path=None, fetch_worker=None, clock=time.monotonic):
         self.clock = clock
         self.heating_timezone = heating_timezone
         self.scheduler = None
         self._schedule_resource = CachedResource(
-            scheduler_url + '/schedule',
+            backend_url + '/schedule',
             lambda text: SchedulerTemperaturePolicy.from_json(text, heating_timezone),
             auth=auth, cache_path=schedule_cache_path,
             update_interval=self.SCHEDULER_UPDATE_INTERVAL, worker=fetch_worker, clock=clock)
 
-        self.scheduler_url = scheduler_url
+        self.backend_url = backend_url
         self.auth = auth
         self.zone_controllers = zone_controllers
 
@@ -211,7 +211,7 @@ class AllZoneController(object):
                 controller.iteration(self.scheduler, now, tick, fetch_deadline)
 
 
-def build_controller(conf, scheduler_url, auth, mqttc, fetch_worker, upload_worker,
+def build_controller(conf, backend_url, auth, mqttc, fetch_worker, upload_worker,
                      cache_dir=Path('/var/lib/boilerio'), startup_timeout=30, clock=time.monotonic):
     """Return a multi-zone controller and its sensors after loading startup data."""
     # Complete bounded startup refreshes before the control loop starts using cached data.
@@ -221,8 +221,8 @@ def build_controller(conf, scheduler_url, auth, mqttc, fetch_worker, upload_work
                                   conf.get('weather', 'location'),
                                   cache_time=timedelta(minutes=20), worker=fetch_worker, clock=clock)
     configuration = startup.load_configuration(
-        scheduler_url, auth, min(deadline, clock() + 10), cache_dir / 'configuration', clock=clock)
-    sensor_updater = update_sensor.TempSensorUpdater(scheduler_url, auth, upload_worker)
+        backend_url, auth, min(deadline, clock() + 10), cache_dir / 'configuration', clock=clock)
+    sensor_updater = update_sensor.TempSensorUpdater(backend_url, auth, upload_worker)
     for sensor in configuration.sensors.values():
         sensor.register_mqtt_callbacks(mqttc)
         sensor_updater.add_sensor(sensor)
@@ -234,13 +234,13 @@ def build_controller(conf, scheduler_url, auth, mqttc, fetch_worker, upload_work
         sensor = configuration.sensors[zone.sensor_id]
         controller = zones.ZoneController(
             zone, boiler, sensor, thermostat.Thermostat(boiler, sensor),
-            scheduler_url, auth, weather_obj,
+            backend_url, auth, weather_obj,
             gradient_table_cache_path=cache_dir / f'gradients-{zone.zone_id}',
             fetch_worker=fetch_worker, upload_worker=upload_worker, clock=clock)
         controllers.append(controller)
 
     controller = AllZoneController(
-        scheduler_url, auth, controllers, configuration.timezone,
+        backend_url, auth, controllers, configuration.timezone,
         schedule_cache_path=cache_dir / 'schedule', fetch_worker=fetch_worker, clock=clock)
     refresh_startup([controller._schedule_resource] + [
         zone._gradient_resource for zone in controllers] + [weather_obj._resource], deadline, clock)
@@ -250,25 +250,23 @@ def main():
     logger.info("Starting boilerio-controller %s", software_version())
     conf = config.load_config()
 
-    # If the 'heating' section of the config has a 'scheduler_username' and
-    # 'scheduler_password' entry, we use these with HTTP basic auth.
-    if conf.has_option('heating', 'scheduler_username') and \
-       conf.has_option('heating', 'scheduler_password'):
+    # Log in to the server with the API key, if one is configured.
+    credentials = config.api_key_credentials(conf)
+    if credentials:
         logger.info("Using HTTP basic authentication")
-        auth = HTTPBasicAuth(conf.get('heating', 'scheduler_username'),
-                             conf.get('heating', 'scheduler_password'))
+        auth = HTTPBasicAuth(*credentials)
     else:
         logger.info("Not using HTTP authentication")
         auth = None
 
     if len(sys.argv) == 2:
-        scheduler_url = sys.argv[1]
+        backend_url = sys.argv[1]
     else:
-        scheduler_url = conf.get('heating', 'scheduler_url')
+        backend_url = conf.get('heating', 'backend_url')
 
     userdata = {
         'conf': conf,
-        'scheduler_url': scheduler_url,
+        'backend_url': backend_url,
         'auth': auth,
         'sensors': {},
         }
@@ -280,7 +278,7 @@ def main():
     upload_worker = WorkerPool(name='upload')
     try:
         controller, sensors = build_controller(
-            conf, scheduler_url, auth, mqttc, fetch_worker, upload_worker)
+            conf, backend_url, auth, mqttc, fetch_worker, upload_worker)
         userdata['sensors'] = sensors
         mqttc.connect(conf.get('mqtt', 'host'), 1883, 60)
         mqttc.loop_start()

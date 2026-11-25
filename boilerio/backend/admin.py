@@ -94,8 +94,8 @@ def main(argv=None):
             print()
             print("For the controller, put these lines in the [heating] section "
                   "of its configuration file:")
-            print(f"scheduler_username = {key_id}")
-            print(f"scheduler_password = {secret}")
+            print(f"api_key_id = {key_id}")
+            print(f"api_key_secret = {secret}")
             print()
             print("The secret is stored only as a hash and cannot be shown again.")
     finally:

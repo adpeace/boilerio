@@ -32,7 +32,7 @@ class ZoneController(object):
 
     STATE_REPORT_RETRY_INTERVAL = timedelta(minutes=1)
 
-    def __init__(self, zone, boiler, sensor, thermostat_obj, scheduler_url,
+    def __init__(self, zone, boiler, sensor, thermostat_obj, backend_url,
                  auth, weather, upload_worker: JobSubmitter,
                  gradient_table_update_frequency=timedelta(hours=1),
                  gradient_table_cache_path=None, fetch_worker=None,
@@ -50,7 +50,7 @@ class ZoneController(object):
         self.thermostat = thermostat_obj
         self.thermostat.set_state_change_callback(self.thermostat_state_callback)
         self._sensor = sensor
-        self.scheduler_url = scheduler_url
+        self.backend_url = backend_url
         self.scheduler_auth = auth
 
         self.reported_state = {
@@ -66,7 +66,7 @@ class ZoneController(object):
         self._next_state_report_attempt = None
         self.gradient_table = []
         self._gradient_resource = CachedResource(
-            scheduler_url + '/zones/%d/gradients' % zone.zone_id, parse_gradient_table,
+            backend_url + '/zones/%d/gradients' % zone.zone_id, parse_gradient_table,
             auth=auth, cache_path=gradient_table_cache_path,
             update_interval=gradient_table_update_frequency, worker=fetch_worker, clock=clock)
         self.weather = weather
@@ -155,7 +155,7 @@ class ZoneController(object):
             self._next_state_report_attempt = completed_at + self.STATE_REPORT_RETRY_INTERVAL.total_seconds()
 
     def _post_state(self, state) -> bool:
-        url = self.scheduler_url + '/zones/%d/reported_state' % self.zone.zone_id
+        url = self.backend_url + '/zones/%d/reported_state' % self.zone.zone_id
         try:
             r = requests.post(url, auth=self.scheduler_auth,
                 timeout=10, json=state, headers={'X-Requested-With': 'device'})

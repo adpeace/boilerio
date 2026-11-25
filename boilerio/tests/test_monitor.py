@@ -55,7 +55,7 @@ def test_boiler_already_on():
 def monitor_client(monkeypatch, tmp_path):
     config = RawConfigParser()
     config.read_dict({
-        'heating': {'scheduler_url': 'https://scheduler', 'info_basetopic': 'heating/zone/info'},
+        'heating': {'backend_url': 'https://scheduler', 'info_basetopic': 'heating/zone/info'},
         'mqtt': {'host': 'broker', 'user': 'user', 'password': 'password'},
         'weather': {'apikey': 'test', 'location': 'London,UK'},
     })

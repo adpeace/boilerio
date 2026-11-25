@@ -145,32 +145,30 @@ def main():
     conf = config.load_config()
 
     # Get zone information:
-    # If the 'heating' section of the config has a 'scheduler_username' and
-    # 'scheduler_password' entry, we use these with HTTP basic auth.
-    if conf.has_option('heating', 'scheduler_username') and \
-       conf.has_option('heating', 'scheduler_password'):
+    # Log in to the server with the API key, if one is configured.
+    credentials = config.api_key_credentials(conf)
+    if credentials:
         logger.info("Using HTTP basic authentication")
-        auth = HTTPBasicAuth(conf.get('heating', 'scheduler_username'),
-                             conf.get('heating', 'scheduler_password'))
+        auth = HTTPBasicAuth(*credentials)
     else:
         logger.info("Not using HTTP authentication")
         auth = None
-    scheduler_url = conf.get('heating', 'scheduler_url')
+    backend_url = conf.get('heating', 'backend_url')
     fetch_worker = WorkerPool(name='monitor-fetch')
     upload_worker = WorkerPool(name='monitor-upload')
     try:
-        run_monitor(conf, auth, scheduler_url, fetch_worker, upload_worker)
+        run_monitor(conf, auth, backend_url, fetch_worker, upload_worker)
     finally:
         fetch_worker.close()
         upload_worker.close()
 
 
-def run_monitor(conf, auth, scheduler_url, fetch_worker, upload_worker):
+def run_monitor(conf, auth, backend_url, fetch_worker, upload_worker):
     weather_obj = weather.Weather(conf.get('weather', 'apikey'),
                                   conf.get('weather', 'location'), worker=fetch_worker)
     deadline = time.monotonic() + 30
     configuration = startup.load_configuration(
-        scheduler_url, auth, min(deadline, time.monotonic() + 10),
+        backend_url, auth, min(deadline, time.monotonic() + 10),
         Path('/var/lib/boilerio/monitor-configuration'))
     refresh_startup([weather_obj._resource], deadline)
     zones, sensors = configuration.zones, configuration.sensors
@@ -195,7 +193,7 @@ def run_monitor(conf, auth, scheduler_url, fetch_worker, upload_worker):
                     'gradient': gradient}
 
             def upload():
-                r = requests.post(scheduler_url +
+                r = requests.post(backend_url +
                         '/zones/%d/gradient_measurements' % zone_id,
                         auth=auth, json=data, timeout=10,
                         headers={'X-Requested-With': 'device'})
