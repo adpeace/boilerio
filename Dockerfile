@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
-FROM python:3.14-slim-trixie@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS python-base
+FROM python:3.14-slim-trixie@sha256:22eafb370920ad8b429e0aec3fff433e0669968519f5d60469d83729c138b28b AS python-base
 
 FROM python-base AS dependencies
-RUN python -m pip install --no-cache-dir uv==0.11.14
+RUN python -m pip install --no-cache-dir uv==0.13.10
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
